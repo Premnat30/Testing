@@ -1,0 +1,896 @@
+# app.py - Flask SQL Query Executor
+from flask import Flask, render_template, request, jsonify
+import sqlite3
+import os
+import traceback
+from datetime import datetime
+
+app = Flask(__name__)
+app.secret_key = 'your-secret-key-here'
+
+# Database configuration
+DATABASE = 'query_executor.db'
+
+class SQLQueryExecutor:
+    def __init__(self, db_path=DATABASE):
+        self.db_path = db_path
+        self.init_database()
+    
+    def init_database(self):
+        """Initialize database with sample data"""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        
+        try:
+            # Create employees table
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS employees (
+                    id INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    department TEXT,
+                    salary REAL,
+                    hire_date DATE
+                )
+            ''')
+            
+            # Create projects table
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS projects (
+                    id INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    department TEXT,
+                    budget REAL,
+                    status TEXT
+                )
+            ''')
+            
+            # Insert sample employees
+            employees_data = [
+                (1, 'John Doe', 'Engineering', 75000, '2020-01-15'),
+                (2, 'Jane Smith', 'Marketing', 65000, '2019-03-22'),
+                (3, 'Mike Johnson', 'Engineering', 80000, '2021-07-10'),
+                (4, 'Sarah Wilson', 'HR', 55000, '2018-11-05'),
+                (5, 'Tom Brown', 'Sales', 60000, '2020-09-18'),
+                (6, 'Lisa Davis', 'Engineering', 82000, '2020-05-12'),
+                (7, 'Robert Miller', 'Marketing', 67000, '2019-08-30'),
+                (8, 'Emily Taylor', 'HR', 58000, '2021-02-14')
+            ]
+            
+            conn.executemany('''
+                INSERT OR REPLACE INTO employees 
+                (id, name, department, salary, hire_date) 
+                VALUES (?, ?, ?, ?, ?)
+            ''', employees_data)
+            
+            # Insert sample projects
+            projects_data = [
+                (1, 'Website Redesign', 'Engineering', 50000, 'Active'),
+                (2, 'Marketing Campaign Q1', 'Marketing', 25000, 'Completed'),
+                (3, 'Mobile App Development', 'Engineering', 100000, 'Planning'),
+                (4, 'HR Management System', 'HR', 30000, 'Active'),
+                (5, 'Sales Dashboard', 'Sales', 40000, 'Active'),
+                (6, 'Data Analytics Platform', 'Engineering', 120000, 'Planning')
+            ]
+            
+            conn.executemany('''
+                INSERT OR REPLACE INTO projects 
+                (id, name, department, budget, status) 
+                VALUES (?, ?, ?, ?, ?)
+            ''', projects_data)
+            
+            conn.commit()
+            print("Database initialized successfully!")
+            
+        except sqlite3.Error as e:
+            print(f"Database initialization error: {e}")
+        finally:
+            conn.close()
+    
+    def is_safe_query(self, query):
+        """Check if query is safe (only allow SELECT statements)"""
+        dangerous_keywords = [
+            'DROP', 'DELETE', 'TRUNCATE', 'ALTER', 'INSERT', 'UPDATE', 
+            'CREATE', 'EXEC', 'EXECUTE', 'UNION', 'REPLACE'
+        ]
+        
+        query_upper = query.upper().strip()
+        
+        # Must start with SELECT
+        if not query_upper.startswith('SELECT'):
+            return False
+        
+        # Check for dangerous keywords
+        for keyword in dangerous_keywords:
+            if keyword in query_upper:
+                return False
+        
+        return True
+    
+    def execute_query(self, query):
+        """Execute SQL query and return results"""
+        if not self.is_safe_query(query):
+            raise ValueError("Only SELECT statements are allowed for security reasons")
+        
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        
+        try:
+            cursor = conn.cursor()
+            cursor.execute(query)
+            results = cursor.fetchall()
+            
+            # Convert to list of dictionaries
+            columns = [description[0] for description in cursor.description] if cursor.description else []
+            data = [dict(row) for row in results]
+            
+            return {
+                'success': True,
+                'columns': columns,
+                'data': data,
+                'row_count': len(data)
+            }
+            
+        except sqlite3.Error as e:
+            return {
+                'success': False,
+                'error': str(e),
+                'columns': [],
+                'data': [],
+                'row_count': 0
+            }
+        finally:
+            conn.close()
+    
+    def search_records(self, table, field, value):
+        """Search records in specified table and field"""
+        valid_tables = ['employees', 'projects']
+        if table not in valid_tables:
+            raise ValueError(f"Invalid table. Valid tables: {', '.join(valid_tables)}")
+        
+        query = f"SELECT * FROM {table} WHERE {field} LIKE ?"
+        
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        
+        try:
+            cursor = conn.cursor()
+            cursor.execute(query, (f"%{value}%",))
+            results = cursor.fetchall()
+            
+            columns = [description[0] for description in cursor.description]
+            data = [dict(row) for row in results]
+            
+            return {
+                'success': True,
+                'columns': columns,
+                'data': data,
+                'row_count': len(data)
+            }
+            
+        except sqlite3.Error as e:
+            return {
+                'success': False,
+                'error': str(e),
+                'columns': [],
+                'data': [],
+                'row_count': 0
+            }
+        finally:
+            conn.close()
+    
+    def get_tables(self):
+        """Get list of available tables"""
+        query = "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+        return self.execute_query(query)
+    
+    def get_table_schema(self, table_name):
+        """Get schema information for a table"""
+        query = f"PRAGMA table_info({table_name})"
+        return self.execute_query(query)
+
+# Initialize SQL executor
+sql_executor = SQLQueryExecutor()
+
+@app.route('/')
+def index():
+    """Serve the main HTML page"""
+    return render_template('index.html')
+
+@app.route('/api/execute', methods=['POST'])
+def execute_query():
+    """Execute SQL query endpoint"""
+    try:
+        data = request.get_json()
+        query = data.get('query', '').strip()
+        
+        if not query:
+            return jsonify({
+                'success': False,
+                'error': 'Query cannot be empty'
+            })
+        
+        result = sql_executor.execute_query(query)
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+@app.route('/api/search', methods=['POST'])
+def search_records():
+    """Search records endpoint"""
+    try:
+        data = request.get_json()
+        table = data.get('table')
+        field = data.get('field')
+        value = data.get('value')
+        
+        if not all([table, field, value]):
+            return jsonify({
+                'success': False,
+                'error': 'Table, field, and value are required'
+            })
+        
+        result = sql_executor.search_records(table, field, value)
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+@app.route('/api/tables', methods=['GET'])
+def get_tables():
+    """Get available tables"""
+    try:
+        result = sql_executor.get_tables()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+@app.route('/api/schema/<table_name>', methods=['GET'])
+def get_table_schema(table_name):
+    """Get table schema"""
+    try:
+        result = sql_executor.get_table_schema(table_name)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({'error': 'Endpoint not found'}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({'error': 'Internal server error'}), 500
+
+if __name__ == '__main__':
+    # Create templates directory if it doesn't exist
+    if not os.path.exists('templates'):
+        os.makedirs('templates')
+    
+    print("🚀 Starting Flask SQL Query Executor...")
+    print("📊 Database initialized with sample data")
+    print("🌐 Server will be available at: http://localhost:5000")
+    
+    app.run(debug=True, host='0.0.0.0', port=5000)
+
+
+# Create HTML template file
+html_template = '''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flask SQL Query Executor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(45deg, #2c3e50, #3498db);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1rem;
+        }
+
+        .main-content {
+            padding: 30px;
+        }
+
+        .query-section {
+            margin-bottom: 30px;
+        }
+
+        .query-section h3 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            font-size: 1.3rem;
+        }
+
+        .query-input {
+            width: 100%;
+            min-height: 120px;
+            padding: 15px;
+            border: 2px solid #e1e8ed;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            resize: vertical;
+            background: #f8f9fa;
+            transition: border-color 0.3s ease;
+        }
+
+        .query-input:focus {
+            outline: none;
+            border-color: #3498db;
+            background: white;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin: 15px 0;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(45deg, #3498db, #2980b9);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: linear-gradient(45deg, #95a5a6, #7f8c8d);
+            color: white;
+        }
+
+        .btn-success {
+            background: linear-gradient(45deg, #27ae60, #229954);
+            color: white;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .search-section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .search-form {
+            display: grid;
+            grid-template-columns: 1fr 1fr 2fr auto;
+            gap: 10px;
+            align-items: end;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group label {
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .form-group select, .form-group input {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .results-section {
+            margin-top: 30px;
+        }
+
+        .results-header {
+            background: #34495e;
+            color: white;
+            padding: 15px;
+            border-radius: 8px 8px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .results-content {
+            border: 1px solid #ddd;
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+            max-height: 400px;
+            overflow: auto;
+        }
+
+        .results-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .results-table th, .results-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+
+        .results-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #2c3e50;
+            position: sticky;
+            top: 0;
+        }
+
+        .results-table tr:hover {
+            background: #f8f9fa;
+        }
+
+        .error-message {
+            background: #e74c3c;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+
+        .success-message {
+            background: #27ae60;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+
+        .sample-queries {
+            background: #ecf0f1;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .sample-queries h4 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+        }
+
+        .sample-query {
+            background: white;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+            border-left: 4px solid #3498db;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .sample-query:hover {
+            background: #f8f9fa;
+            transform: translateX(5px);
+        }
+
+        .sample-query code {
+            font-family: 'Courier New', monospace;
+            color: #2c3e50;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .status-indicator {
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: bold;
+            display: inline-block;
+            margin-top: 10px;
+        }
+
+        .status-connected {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        @media (max-width: 768px) {
+            .search-form {
+                grid-template-columns: 1fr;
+            }
+            
+            .button-group {
+                flex-direction: column;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🐍 Flask SQL Query Executor</h1>
+            <p>Execute SQL queries with Python Flask backend</p>
+            <div id="statusIndicator" class="status-indicator status-connected">
+                ✅ Connected to Flask Backend
+            </div>
+        </div>
+
+        <div class="main-content">
+            <!-- Sample Queries Section -->
+            <div class="sample-queries">
+                <h4>📝 Sample Queries (Click to use):</h4>
+                <div class="sample-query" onclick="setQuery('SELECT * FROM employees;')">
+                    <code>SELECT * FROM employees;</code> - Show all employees
+                </div>
+                <div class="sample-query" onclick="setQuery('SELECT name, salary FROM employees WHERE department = \\'Engineering\\';')">
+                    <code>SELECT name, salary FROM employees WHERE department = 'Engineering';</code> - Engineering staff
+                </div>
+                <div class="sample-query" onclick="setQuery('SELECT department, AVG(salary) as avg_salary FROM employees GROUP BY department;')">
+                    <code>SELECT department, AVG(salary) as avg_salary FROM employees GROUP BY department;</code> - Average salary by department
+                </div>
+                <div class="sample-query" onclick="setQuery('SELECT * FROM projects WHERE status = \\'Active\\';')">
+                    <code>SELECT * FROM projects WHERE status = 'Active';</code> - Active projects
+                </div>
+                <div class="sample-query" onclick="setQuery('SELECT p.name, p.budget, e.name as manager FROM projects p JOIN employees e ON p.department = e.department WHERE e.salary > 70000;')">
+                    <code>SELECT p.name, p.budget FROM projects p JOIN employees e ON p.department = e.department;</code> - Projects with team info
+                </div>
+            </div>
+
+            <!-- Search Section -->
+            <div class="search-section">
+                <h3>🔍 Quick Search</h3>
+                <div class="search-form">
+                    <div class="form-group">
+                        <label for="searchTable">Table:</label>
+                        <select id="searchTable">
+                            <option value="employees">employees</option>
+                            <option value="projects">projects</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="searchField">Field:</label>
+                        <select id="searchField">
+                            <option value="name">name</option>
+                            <option value="department">department</option>
+                            <option value="salary">salary</option>
+                            <option value="status">status</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="searchValue">Search Value:</label>
+                        <input type="text" id="searchValue" placeholder="Enter search term...">
+                    </div>
+                    <button class="btn btn-secondary" onclick="performSearch()">Search</button>
+                </div>
+            </div>
+
+            <!-- Query Input Section -->
+            <div class="query-section">
+                <h3>💻 SQL Query Editor</h3>
+                <textarea id="queryInput" class="query-input" placeholder="Enter your SQL query here...">SELECT * FROM employees;</textarea>
+                
+                <div class="button-group">
+                    <button class="btn btn-primary" onclick="executeQuery()" id="executeBtn">Execute Query</button>
+                    <button class="btn btn-secondary" onclick="clearQuery()">Clear</button>
+                    <button class="btn btn-success" onclick="showTables()">Show Tables</button>
+                </div>
+            </div>
+
+            <!-- Loading Indicator -->
+            <div id="loading" class="loading">
+                <div class="spinner"></div>
+                <p>Executing query...</p>
+            </div>
+
+            <!-- Results Section -->
+            <div id="resultsSection" class="results-section" style="display: none;">
+                <div class="results-header">
+                    <h3>📊 Query Results</h3>
+                    <span id="resultCount"></span>
+                </div>
+                <div class="results-content">
+                    <div id="resultsContainer"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function setQuery(query) {
+            document.getElementById('queryInput').value = query;
+        }
+
+        function clearQuery() {
+            document.getElementById('queryInput').value = '';
+            hideResults();
+        }
+
+        function showLoading() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('executeBtn').disabled = true;
+            hideResults();
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('executeBtn').disabled = false;
+        }
+
+        function showResults() {
+            document.getElementById('resultsSection').style.display = 'block';
+        }
+
+        function hideResults() {
+            document.getElementById('resultsSection').style.display = 'none';
+        }
+
+        function showError(message) {
+            const container = document.getElementById('resultsContainer');
+            container.innerHTML = `<div class="error-message">❌ Error: ${message}</div>`;
+            showResults();
+            updateStatus('error');
+        }
+
+        function showSuccess(message) {
+            const container = document.getElementById('resultsContainer');
+            container.innerHTML = `<div class="success-message">✅ ${message}</div>`;
+            showResults();
+        }
+
+        function updateStatus(status) {
+            const indicator = document.getElementById('statusIndicator');
+            if (status === 'error') {
+                indicator.className = 'status-indicator status-error';
+                indicator.innerHTML = '❌ Backend Error';
+            } else {
+                indicator.className = 'status-indicator status-connected';
+                indicator.innerHTML = '✅ Connected to Flask Backend';
+            }
+        }
+
+        async function executeQuery() {
+            const query = document.getElementById('queryInput').value.trim();
+            
+            if (!query) {
+                showError('Please enter a SQL query');
+                return;
+            }
+
+            showLoading();
+
+            try {
+                const response = await fetch('/api/execute', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ query: query })
+                });
+
+                const result = await response.json();
+                hideLoading();
+
+                if (result.success) {
+                    displayResults(result);
+                    updateStatus('connected');
+                } else {
+                    showError(result.error);
+                }
+            } catch (error) {
+                hideLoading();
+                showError(`Network error: ${error.message}`);
+            }
+        }
+
+        async function performSearch() {
+            const table = document.getElementById('searchTable').value;
+            const field = document.getElementById('searchField').value;
+            const value = document.getElementById('searchValue').value;
+            
+            if (!value) {
+                showError('Please enter a search value');
+                return;
+            }
+
+            showLoading();
+
+            try {
+                const response = await fetch('/api/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ 
+                        table: table,
+                        field: field,
+                        value: value 
+                    })
+                });
+
+                const result = await response.json();
+                hideLoading();
+
+                if (result.success) {
+                    displayResults(result);
+                    updateStatus('connected');
+                } else {
+                    showError(result.error);
+                }
+            } catch (error) {
+                hideLoading();
+                showError(`Network error: ${error.message}`);
+            }
+        }
+
+        async function showTables() {
+            showLoading();
+
+            try {
+                const response = await fetch('/api/tables');
+                const result = await response.json();
+                hideLoading();
+
+                if (result.success) {
+                    displayResults(result);
+                    updateStatus('connected');
+                } else {
+                    showError(result.error);
+                }
+            } catch (error) {
+                hideLoading();
+                showError(`Network error: ${error.message}`);
+            }
+        }
+
+        function displayResults(result) {
+            const { columns, data, row_count } = result;
+            const container = document.getElementById('resultsContainer');
+            const countElement = document.getElementById('resultCount');
+            
+            countElement.textContent = `${row_count} row(s)`;
+
+            if (data.length === 0) {
+                container.innerHTML = '<div style="padding: 20px; text-align: center; color: #7f8c8d;">No results found</div>';
+            } else {
+                let tableHTML = '<table class="results-table"><thead><tr>';
+                
+                columns.forEach(col => {
+                    tableHTML += `<th>${col}</th>`;
+                });
+                
+                tableHTML += '</tr></thead><tbody>';
+                
+                data.forEach(row => {
+                    tableHTML += '<tr>';
+                    columns.forEach(col => {
+                        const value = row[col];
+                        tableHTML += `<td>${value !== null && value !== undefined ? value : ''}</td>`;
+                    });
+                    tableHTML += '</tr>';
+                });
+                
+                tableHTML += '</tbody></table>';
+                container.innerHTML = tableHTML;
+            }
+            
+            showResults();
+        }
+
+        // Test connection on page load
+        document.addEventListener('DOMContentLoaded', async function() {
+            console.log('Flask SQL Query Executor initialized');
+            
+            // Test backend connection
+            try {
+                const response = await fetch('/api/tables');
+                if (response.ok) {
+                    updateStatus('connected');
+                } else {
+                    updateStatus('error');
+                }
+            } catch (error) {
+                updateStatus('error');
+            }
+        });
+
+        // Allow Enter key to execute query
+        document.getElementById('queryInput').addEventListener('keydown', function(event) {
+            if (event.ctrlKey && event.key === 'Enter') {
+                executeQuery();
+            }
+        });
+    </script>
+</body>
+</html>'''
+
+# Save the HTML template
+with open('templates/index.html', 'w') as f:
+    f.write(html_template)
+
+print("HTML template created at templates/index.html")
