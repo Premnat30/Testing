@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Process Controller</title>
+	<style>
+		:root { color-scheme: light dark; }
+		body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, sans-serif; margin: 2rem; }
+		.container { max-width: 720px; margin: 0 auto; }
+		.card { border: 1px solid #8884; border-radius: 12px; padding: 1.25rem; box-shadow: 0 2px 6px #00000018; }
+		.row { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; }
+		input[type="text"] { flex: 1 1 320px; padding: .6rem .8rem; border-radius: 8px; border: 1px solid #8886; font-size: 1rem; }
+		button { padding: .6rem 1rem; border-radius: 8px; border: 1px solid #5556; background: #0d6efd; color: white; cursor: pointer; font-size: 1rem; }
+		button.secondary { background: #6c757d; }
+		button:disabled { opacity: .6; cursor: not-allowed; }
+		.status { margin-top: 1rem; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; white-space: pre-wrap; background: #00000008; padding: .75rem; border-radius: 8px; }
+		label { font-weight: 600; margin-right: .25rem; }
+		small { color: #666; }
+	</style>
+</head>
+<body>
+	<div class="container">
+		<h1>Unix Process Controller</h1>
+		<p>Enter a process name (executable on PATH), then Start or Stop matching processes.</p>
+		<div class="card">
+			<div class="row">
+				<label for="processName">Process Name</label>
+				<input id="processName" type="text" placeholder="e.g. sleep" />
+				<button id="startBtn">Start</button>
+				<button id="stopBtn" class="secondary">Stop</button>
+			</div>
+			<small>Allowed characters: letters, numbers, underscore, dash, dot.</small>
+			<div id="status" class="status" aria-live="polite"></div>
+		</div>
+	</div>
+
+	<script>
+		const processInput = document.getElementById('processName');
+		const startBtn = document.getElementById('startBtn');
+		const stopBtn = document.getElementById('stopBtn');
+		const statusBox = document.getElementById('status');
+
+		function setBusy(busy) {
+			startBtn.disabled = busy;
+			stopBtn.disabled = busy;
+			processInput.disabled = busy;
+		}
+
+		async function callApi(path, payload) {
+			const resp = await fetch(path, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(payload)
+			});
+			const data = await resp.json().catch(() => ({ ok: false, error: 'Invalid JSON response' }));
+			return { status: resp.status, data };
+		}
+
+		function show(obj) {
+			statusBox.textContent = JSON.stringify(obj, null, 2);
+		}
+
+		startBtn.addEventListener('click', async () => {
+			const name = processInput.value.trim();
+			if (!name) { show({ ok: false, error: 'Enter a process name' }); return; }
+			setBusy(true);
+			try {
+				const res = await callApi('/api/start', { processName: name });
+				show(res.data);
+			} catch (e) {
+				show({ ok: false, error: String(e) });
+			} finally {
+				setBusy(false);
+			}
+		});
+
+		stopBtn.addEventListener('click', async () => {
+			const name = processInput.value.trim();
+			if (!name) { show({ ok: false, error: 'Enter a process name' }); return; }
+			setBusy(true);
+			try {
+				const res = await callApi('/api/stop', { processName: name });
+				show(res.data);
+			} catch (e) {
+				show({ ok: false, error: String(e) });
+			} finally {
+				setBusy(false);
+			}
+		});
+	</script>
+</body>
+</html>
+
