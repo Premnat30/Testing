@@ -1,9 +1,13 @@
-python
 import os
+import time
+import subprocess
 import paramiko
-from flask import Flask, render_template, request, Response, abort, jsonify, stream_with_context
+from flask import Flask, render_template, request, Response, abort, session, redirect, url_for, jsonify, stream_with_context
+from flask_session import Session
+from config import get_host_config
+import secrets
 import logging
-from config import get_host_config  # Import the function
+
 
 app = Flask(__name__)
 
@@ -68,3 +72,6 @@ def index():
         hosts=hosts,
         selected_host=hostname_key
     )
+
+if __name__ == '__main__':
+    app.run(host='10.198.23.92',port=5000, debug=True)
