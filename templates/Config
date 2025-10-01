@@ -2,46 +2,129 @@ import os
 import time
 import subprocess
 import paramiko
-from flask import Flask, render_template, request, Response, abort, redirect, url_for, jsonify, stream_with_context
-from config import get_host_config
+from flask import Flask, render_template, request, Response, abort, session, redirect, url_for, jsonify, stream_with_context
+from flask_session import Session
+import secrets
+import logging
+
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-def _get_ssh_client(hostname_config):
-    """Establishes an SSH connection to a remote host using SSH keys."""
+# --- Flask-Session Configuration ---
+app.config["SESSION_TYPE"] = "filesystem"
+app.config["SESSION_PERMANENT"] = False
+app.config["SESSION_USE_SIGNER"] = True
+app.config["SESSION_KEY_PREFIX"] = "my_app_session_"
+app.config["SESSION_FILE_DIR"] = "/tmp/flask_session"
+Session(app)
+
+# Ensure the session directory exists
+if not os.path.exists(app.config["SESSION_FILE_DIR"]):
+    os.makedirs(app.config["SESSION_FILE_DIR"])
+
+# --- Host Configuration for Password Auth ---
+HOST_CONFIG = {
+    'test': {
+        'hostname': 'test.uk.com',
+        'username': 'user',
+        'log_dir': '/apps/logs//'
+    },
+    'test1': {
+        'hostname': 'test1.uk.standardchartered.com',
+        'username': 'user',
+        'log_dir': '/apps/logs//'
+    }
+}
+
+def _parse_ps_output(output_lines):
+    """
+    Parses the output of the 'ps aux' command into a list of process dictionaries.
+    """
+    processes = []
+    for line in output_lines[1:]:
+        parts = line.split()
+        if len(parts) >= 11:
+            process_info = {
+                'user': parts[0],
+                'pid': parts[1],
+                'cpu': parts[2],
+                'mem': parts[3],
+                'vsz': parts[4],
+                'rss': parts[5],
+                'tty': parts[6],
+                'stat': parts[7],
+                'start': parts[8],
+                'time': parts[9],
+                'command': ' '.join(parts[10:])
+            }
+            processes.append(process_info)
+    return processes
+
+def _get_ssh_client(hostname_config, password):
+    """Establishes an SSH connection to a remote host using a password."""
     try:
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         client.connect(
             hostname=hostname_config['hostname'],
             username=hostname_config['username'],
-            look_for_keys=True,  # Use SSH keys instead of password
-            allow_agent=True,    # Use SSH agent if available
+            password=password,
+            look_for_keys=False,
             timeout=10
         )
         return client
+    except paramiko.AuthenticationException:
+        app.logger.error(f"Authentication failed for {hostname_config['hostname']}")
+        return None
     except Exception as e:
         app.logger.error(f"SSH connection failed for {hostname_config['hostname']}: {e}")
         return None
 
+# --- NEW: Get host password from session ---
+def get_host_password(hostname_key):
+    """Retrieves the password for a host from the session."""
+    return session.get('passwords', {}).get(hostname_key)
+
+# --- MODIFIED: Authentication Route ---
+@app.route('/authenticate', methods=['GET', 'POST'])
+def authenticate():
+    if request.method == 'POST':
+        password = request.form['password']
+        authenticated_hosts = {}
+        for hostname_key, hostname_config in HOST_CONFIG.items():
+            client = _get_ssh_client(hostname_config, password)
+            if client:
+                client.close()
+                authenticated_hosts[hostname_key] = password
+
+        if authenticated_hosts:
+            session['passwords'] = authenticated_hosts
+            return redirect(url_for('index'))
+        else:
+            return render_template('authenticate.html', hosts=HOST_CONFIG.keys(), error="Authentication failed for all hosts.")
+    
+    return render_template('authenticate.html', hosts=HOST_CONFIG.keys())
+
 # --- Index Route for Log Searching ---
 @app.route('/')
 def index():
-    HOST_CONFIG = get_host_config()
-    hosts_list = list(HOST_CONFIG.keys())
-    
-    hostname_key = request.args.get('hostname')
-    if not hostname_key or hostname_key not in HOST_CONFIG:
-        hostname_key = hosts_list[0] if hosts_list else None
+    if 'passwords' not in session or not session['passwords']:
+        return redirect(url_for('authenticate'))
 
-    if not hostname_key:
-        return "No hosts configured", 500
+    hostname_key = request.args.get('hostname')
+    if not hostname_key or hostname_key not in session['passwords']:
+        hostname_key = next(iter(session['passwords']), None)
+
+    password = get_host_password(hostname_key)
+    if not password:
+        return redirect(url_for('authenticate'))
 
     hostname_config = HOST_CONFIG.get(hostname_key)
-    client = _get_ssh_client(hostname_config)
+    client = _get_ssh_client(hostname_config, password)
     if not client:
-        return f"SSH connection failed for {hostname_key}. Please ensure SSH keys are configured.", 500
+        session.get('passwords', {}).pop(hostname_key, None)
+        return redirect(url_for('authenticate'))
 
     filename_filter = request.args.get('filename_filter', '').lower()
     log_files = []
@@ -60,21 +143,26 @@ def index():
     return render_template('search.html',
         log_files=log_files,
         filename_filter=filename_filter,
-        hosts=hosts_list,
+        hosts=HOST_CONFIG.keys(),
         selected_host=hostname_key
     )
 
-# --- Process Task Route ---
+
+# --- NEW: Process Task Route ---
 @app.route('/processes/<hostname_key>')
 def process_task(hostname_key):
-    HOST_CONFIG = get_host_config()
+    # Check for authentication
+    password = get_host_password(hostname_key)
+    if not password:
+        return redirect(url_for('authenticate'))
+
     hostname_config = HOST_CONFIG.get(hostname_key)
     if not hostname_config:
         abort(404, description="Host not found.")
 
     processes = []
     error = None
-    client = _get_ssh_client(hostname_config)
+    client = _get_ssh_client(hostname_config, password)
     if client:
         try:
             stdin, stdout, stderr = client.exec_command('ps aux')
@@ -85,28 +173,14 @@ def process_task(hostname_key):
         finally:
             client.close()
     else:
-        error = f"Failed to connect to host '{hostname_key}'. Please ensure SSH keys are configured."
+        error = f"Failed to connect to host '{hostname_key}'."
     
     return render_template('process_task.html',
         host_name=hostname_key,
         processes=processes,
         error=error,
-        hosts=list(HOST_CONFIG.keys())
+        hosts=HOST_CONFIG.keys()
     )
-
-def _parse_ps_output(output):
-    """Parse ps aux output and return list of processes."""
-    processes = []
-    if not output:
-        return processes
-    
-    headers = output[0].split()
-    for line in output[1:]:
-        if line.strip():
-            parts = line.split(None, len(headers)-1)
-            if len(parts) == len(headers):
-                processes.append(dict(zip(headers, parts)))
-    return processes
 
 LOGS_DIR = os.path.abspath('/apps/logs/s2bxtb01/')
 
@@ -114,7 +188,6 @@ LOGS_DIR = os.path.abspath('/apps/logs/s2bxtb01/')
 def search_logs():
     selected_log = request.args.get('log_file')
     query = request.args.get('query', '')
-    hostname_key = request.args.get('hostname')
     results = []
 
     if not selected_log:
@@ -135,42 +208,45 @@ def search_logs():
         return f"Log file '{selected_log}' not found.", 404
     except Exception as e:
         return f"An error occurred: {e}", 500
-
-    HOST_CONFIG = get_host_config()
-    return render_template('search_result.html',
-        query=query,
+        
+        return render_template('search_result.html',
+        query=grep_query,
         results=results,
         selected_log=selected_log,
-        selected_host=hostname_key,
-        hosts=list(HOST_CONFIG.keys())
+        selected_host=hostname_key
     )
 
-# --- Tail Log Route ---
+
+# --- Tail---
 @app.route('/tail/<hostname_key>/<path:filename>')
 def tail_log(hostname_key, filename):
-    HOST_CONFIG = get_host_config()
     if hostname_key not in HOST_CONFIG:
         return "Invalid hostname.", 400
+    if not get_host_password(hostname_key):
+        return redirect(url_for('authenticate', hostname=hostname_key))
     
-    return render_template('tail.html', 
-                         log_file=filename, 
-                         hostname_key=hostname_key, 
-                         hosts=list(HOST_CONFIG.keys()))
+    return render_template('tail.html', log_file=filename, hostname_key=hostname_key, hosts=HOST_CONFIG.keys())
+
 
 @app.route('/stream/<hostname_key>/<path:filename>')
 def stream_logs(hostname_key, filename):
-    HOST_CONFIG = get_host_config()
+    password = get_host_password(hostname_key)
+    if not password:
+        return Response("Error: Authentication required for this host.", status=401)
+    
     hostname_config = HOST_CONFIG.get(hostname_key)
     if not hostname_config:
         return "Invalid hostname.", 400
 
-    client = _get_ssh_client(hostname_config)
+    client = _get_ssh_client(hostname_config, password)
     if not client:
-        return f"Could not connect to host '{hostname_key}'. Please ensure SSH keys are configured.", 500
+        return f"Could not connect to host '{hostname_key}'.", 500
     
     log_file_path = os.path.join(hostname_config['log_dir'], filename)
 
+    # Return the Response with the generator function
     return Response(stream_with_context(follow_remote(client, log_file_path)), mimetype='text/event-stream')
+
 
 def follow_remote(client, log_file_path):
     try:
@@ -201,4 +277,4 @@ def follow_remote(client, log_file_path):
         client.close()
 
 if __name__ == '__main__':
-    app.run(host='localhost', port=5000, debug=True)
+    app.run(host='local',port=5000, debug=True)
