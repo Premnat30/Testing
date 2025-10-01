@@ -6,7 +6,7 @@ from flask import Flask, render_template, request, Response, abort, session, red
 from flask_session import Session
 import secrets
 import logging
-
+from config import get_host_config  # Import from config.py
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -22,20 +22,6 @@ Session(app)
 # Ensure the session directory exists
 if not os.path.exists(app.config["SESSION_FILE_DIR"]):
     os.makedirs(app.config["SESSION_FILE_DIR"])
-
-# --- Host Configuration for Password Auth ---
-HOST_CONFIG = {
-    'test': {
-        'hostname': 'test.uk.com',
-        'username': 'user',
-        'log_dir': '/apps/logs//'
-    },
-    'test1': {
-        'hostname': 'test1.uk.standardchartered.com',
-        'username': 'user',
-        'log_dir': '/apps/logs//'
-    }
-}
 
 def _parse_ps_output(output_lines):
     """
@@ -81,14 +67,16 @@ def _get_ssh_client(hostname_config, password):
         app.logger.error(f"SSH connection failed for {hostname_config['hostname']}: {e}")
         return None
 
-# --- NEW: Get host password from session ---
+# --- Get host password from session ---
 def get_host_password(hostname_key):
     """Retrieves the password for a host from the session."""
     return session.get('passwords', {}).get(hostname_key)
 
-# --- MODIFIED: Authentication Route ---
+# --- Authentication Route ---
 @app.route('/authenticate', methods=['GET', 'POST'])
 def authenticate():
+    HOST_CONFIG = get_host_config()  # Call function to get host config
+    
     if request.method == 'POST':
         password = request.form['password']
         authenticated_hosts = {}
@@ -112,6 +100,7 @@ def index():
     if 'passwords' not in session or not session['passwords']:
         return redirect(url_for('authenticate'))
 
+    HOST_CONFIG = get_host_config()  # Call function to get host config
     hostname_key = request.args.get('hostname')
     if not hostname_key or hostname_key not in session['passwords']:
         hostname_key = next(iter(session['passwords']), None)
@@ -147,8 +136,7 @@ def index():
         selected_host=hostname_key
     )
 
-
-# --- NEW: Process Task Route ---
+# --- Process Task Route ---
 @app.route('/processes/<hostname_key>')
 def process_task(hostname_key):
     # Check for authentication
@@ -156,6 +144,7 @@ def process_task(hostname_key):
     if not password:
         return redirect(url_for('authenticate'))
 
+    HOST_CONFIG = get_host_config()  # Call function to get host config
     hostname_config = HOST_CONFIG.get(hostname_key)
     if not hostname_config:
         abort(404, description="Host not found.")
@@ -188,6 +177,7 @@ LOGS_DIR = os.path.abspath('/apps/logs/s2bxtb01/')
 def search_logs():
     selected_log = request.args.get('log_file')
     query = request.args.get('query', '')
+    hostname_key = request.args.get('hostname')  # Added missing hostname_key
     results = []
 
     if not selected_log:
@@ -208,25 +198,29 @@ def search_logs():
         return f"Log file '{selected_log}' not found.", 404
     except Exception as e:
         return f"An error occurred: {e}", 500
-        
-        return render_template('search_result.html',
-        query=grep_query,
+
+    HOST_CONFIG = get_host_config()  # Call function to get host config
+    return render_template('search_result.html',
+        query=query,
         results=results,
         selected_log=selected_log,
-        selected_host=hostname_key
+        selected_host=hostname_key,
+        hosts=HOST_CONFIG.keys()
     )
 
-
-# --- Tail---
+# --- Tail Log Route ---
 @app.route('/tail/<hostname_key>/<path:filename>')
 def tail_log(hostname_key, filename):
+    HOST_CONFIG = get_host_config()  # Call function to get host config
     if hostname_key not in HOST_CONFIG:
         return "Invalid hostname.", 400
     if not get_host_password(hostname_key):
         return redirect(url_for('authenticate', hostname=hostname_key))
     
-    return render_template('tail.html', log_file=filename, hostname_key=hostname_key, hosts=HOST_CONFIG.keys())
-
+    return render_template('tail.html', 
+                         log_file=filename, 
+                         hostname_key=hostname_key, 
+                         hosts=HOST_CONFIG.keys())
 
 @app.route('/stream/<hostname_key>/<path:filename>')
 def stream_logs(hostname_key, filename):
@@ -234,6 +228,7 @@ def stream_logs(hostname_key, filename):
     if not password:
         return Response("Error: Authentication required for this host.", status=401)
     
+    HOST_CONFIG = get_host_config()  # Call function to get host config
     hostname_config = HOST_CONFIG.get(hostname_key)
     if not hostname_config:
         return "Invalid hostname.", 400
@@ -246,7 +241,6 @@ def stream_logs(hostname_key, filename):
 
     # Return the Response with the generator function
     return Response(stream_with_context(follow_remote(client, log_file_path)), mimetype='text/event-stream')
-
 
 def follow_remote(client, log_file_path):
     try:
@@ -276,5 +270,11 @@ def follow_remote(client, log_file_path):
     finally:
         client.close()
 
+# --- Logout Route ---
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('authenticate'))
+
 if __name__ == '__main__':
-    app.run(host='local',port=5000, debug=True)
+    app.run(host='localhost', port=5000, debug=True)  # Fixed 'local' to 'localhost'
