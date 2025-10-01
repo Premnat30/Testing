@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Search Results</title>
+    <style>
+        body { font-family: sans-serif; }
+        .container { max-width: 800px; margin: auto; padding: 20px; }
+        pre { background-color: #f4f4f4; padding: 10px; border: 1px solid #ddd; white-space: pre-wrap; word-wrap: break-word; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Search Results</h1>
+        <p>Showing results for `{{ query }}` in `{{ selected_log }}`.</p>
+        <a href="/?hostname={{ hostname_key }}" class="back-link">Back to file list</a>
+        {% if results %}
+            <p>Found {{ results|length }} matching lines:</p>
+            <pre>
+                {% for line in results %}
+{{ line }}
+                {% endfor %}
+            </pre>
+        {% else %}
+            <p>No matching logs found.</p>
+        {% endif %}
+    </div>
+    
+   
+</body>
+</html>
+
