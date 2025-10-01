@@ -7,6 +7,15 @@
         body { font-family: sans-serif; }
         .container { max-width: 800px; margin: auto; padding: 20px; }
         pre { background-color: #f4f4f4; padding: 10px; border: 1px solid #ddd; white-space: pre-wrap; word-wrap: break-word; }
+        /* New styles for highlighting */
+        .error-highlight {
+            color: red;
+            font-weight: bold; /* Optional: Make it bold for emphasis */
+        }
+        .warning-highlight {
+            color: orange; /* Using orange for better visibility against #f4f4f4 background */
+            font-weight: bold; /* Optional: Make it bold for emphasis */
+        }
     </style>
 </head>
 <body>
@@ -19,7 +28,7 @@
             <p>Found {{ results|length }} matching lines:</p>
             <pre>
                 {% for line in results %}
-{{ line }}
+                    {{ line | replace('ERROR', '<span class="error-highlight">ERROR</span>') | replace('Warning', '<span class="warning-highlight">Warning</span>') | safe }}
                 {% endfor %}
             </pre>
         {% else %}
@@ -30,4 +39,3 @@
    
 </body>
 </html>
-
