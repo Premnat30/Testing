@@ -126,21 +126,26 @@
         <h1>Monitor Logs and Processes</h1>
         <nav>
             <ul>
-                <!-- Menu to switch between hosts -->
-                {% for host_key in hosts %}
+                <!-- Dropdown menu for selecting hosts -->
+                <li class="dropdown">
+                    <label for="env-dropdown">Environment:</label>
+                    <select id="env-dropdown" onchange="window.location.href = this.value;">
+                        {% for host_key in hosts %}
+                            <option value="{{ url_for('index', hostname=host_key) }}" {% if host_key == selected_host %} selected {% endif %}>
+                                {{ host_key }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </li>
+                <!-- Always show the link for the currently selected host's processes -->
                 <li>
-                    <a href="{{ url_for('index', hostname=host_key) }}" class="{% if host_key == selected_host %}active{% endif %}">
-                        {{ host_key }} (Logs)
+                    <a href="{{ url_for('process_task', hostname_key=selected_host) }}">
+                        {{ selected_host }} (Processes)
                     </a>
                 </li>
-                <li>
-                    <a href="{{ url_for('process_task', hostname_key=host_key) }}">
-                        {{ host_key }} (Processes)
-                    </a>
-                </li>
-                {% endfor %}
             </ul>
         </nav>
+   
     </header>
 
     <main class="container">
