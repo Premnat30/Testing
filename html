@@ -1,157 +1,208 @@
-<!-- templates/search.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Log Search</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Log and Process Monitor</title>
     <style>
+        /* Basic styles for a clean, modern look */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f7f9;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 0 20px;
+        }
+
+        header {
+            background-color: #fff;
+            padding: 10px 20px;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        nav ul {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            display: flex;
+        }
+
+        nav li {
+            margin-right: 15px;
+        }
+
+        nav a {
+            text-decoration: none;
+            color: #555;
+            padding: 8px 12px;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+        }
+
+        nav a.active,
+        nav a:hover {
+            background-color: #e2e6ea;
+        }
+
+        h1, h2 {
+            color: #1c2b36;
+        }
+
+        .card {
+            background-color: #fff;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        input[type="text"],
+        select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box; /* Ensures padding doesn't affect total width */
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+        }
+        
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        /* Responsive design for smaller screens */
+        @media (max-width: 768px) {
+            header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            nav ul {
+                flex-direction: column;
+                margin-top: 10px;
+            }
+
+            nav li {
+                margin: 5px 0;
+            }
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Search Log Files</h1>
+    <header>
+        <h1>Monitor Logs and Processes</h1>
+        <nav>
+            <ul>
+                <!-- Menu to switch between hosts -->
+                {% for host_key in hosts %}
+                <li>
+                    <a href="{{ url_for('index', hostname=host_key) }}" class="{% if host_key == selected_host %}active{% endif %}">
+                        {{ host_key }} (Logs)
+                    </a>
+                </li>
+                <li>
+                    <a href="{{ url_for('process_task', hostname_key=host_key) }}">
+                        {{ host_key }} (Processes)
+                    </a>
+                </li>
+                {% endfor %}
+            </ul>
+        </nav>
+    </header>
 
-        <!-- Host Selection -->
-        <div class="row">
-            <div class="two columns">
-                <label for="host_select">Switch Host</label>
-                <select id="host_select" name="hostname" onchange="location = this.value;">
-                    {% for host in hosts %}
-                        <option value="{{ url_for('index', hostname=host) }}" {% if host == selected_host %} selected {% endif %}>
-                            {{ host }}
-                        </option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="ten columns">
-                <h4>Logs for {{ selected_host }}</h4>
-        
+    <main class="container">
+        <h2>Logs for {{ selected_host }}</h2>
 
-             
+        <div class="card">
+            <h3>Search and Filter</h3>
+            <form action="/grep" method="GET">
+                <input type="hidden" name="hostname" value="{{ selected_host }}">
                 
-                
-        <!-- Filter Form -->
-        <form id="filter-form" action="/" method="GET" class="form-group">
-            <input type="hidden" name="hostname" id="filter-hostname" value="{{ selected_host }}">
-            <label for="filename_filter">Filter Log Files:</label>
-            <input type="text" name="filename_filter" id="filename_filter" 
-                   value="{{ filename_filter }}" placeholder="e.g., 'dealhub'" 
-                   style="width: 300px; padding: 5px;">
-            <button type="submit">Filter</button>
-        </form> <br>
-        
-        <!-- Grep Search Form -->
-        <form id="grep-form" action="/grep" method="GET">
-            <input type="hidden" name="hostname" id="grep-hostname" value="{{ selected_host }}">
-            <div class="form-group">
-                <label for="log_file_grep">Select Log File for Grep:</label>
-                <select name="log_file" id="log_file_grep" style="width: 300px; padding: 5px;">
-                    {% for file in log_files %}
-                        <option value="{{ file }}">{{ file }}</option>
-                    {% else %}
-                        <option value="">No files found. Try another filter.</option>
-                    {% endfor %}
-                </select>
-            </div><br>
-            <div class="form-group"> 
-                <label for="grep_query">Grep Search Term:</label>
-                <input type="text" name="grep_query" id="grep_query" placeholder="e.g., 'error'" style="width: 300px; padding: 5px;"> <button type="submit">Grep Search</button>
-            </div>
-            </form>
-<br>
-
-        <!--Search Form -->
-        <form id="search-form" action="/search" method="GET">
-            <input type="hidden" name="hostname" id="search-hostname" value="{{ selected_host }}">
-            <div class="form-group">
-                <label for="log_file_search">Select Log File for Simple Search:</label>
-                <select name="log_file" id="log_file_search" style="width: 300px; padding: 5px;">
-                    {% for file in log_files %}
-                        <option value="{{ file }}">{{ file }}</option>
-                    {% else %}
-                        <option value="">No files found. Try another filter.</option>
-                    {% endfor %}
-                </select>
-            </div><br>
-            
-            <div class="form-group">
-                <label for="query">Search Term (case-insensitive):</label>
-                <input type="text" name="query" id="query" placeholder="e.g., 'error, debug'" style="width: 300px; padding: 5px;">
-                <button type="submit">Search</button>
-            </div>
-            </form> </div><br>
-
-
-        <!-- Tail Button -->
-        <div class="row" style="margin-top: 20px;">
-            <div class="twelve columns">
-                <h4>Live Tail on {{ selected_host }}</h4>
-                <div class="row">
-                    <div class="eight columns">
-                        <label for="log_file_tail">Select Log File for Live Tail:</label>
-                        <select id="log_file_tail" class="u-full-width" required>
-                            <option value="" disabled selected>-- Select a log file --</option>
-                            {% for file in log_files %}
-                                <option value="{{ file }}">{{ file }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="four columns">
-                        <button class="button-primary" id="tail-button" style="margin-top: 24px;">Start Live Tail</button>
-                    </div>
+                <div class="form-group">
+                    <label for="log_file_search">Select Log File:</label>
+                    <select name="log_file" id="log_file_search">
+                        {% for file in log_files %}
+                            <option value="{{ file }}">{{ file }}</option>
+                        {% else %}
+                            <option value="">No files found. Try another filter.</option>
+                        {% endfor %}
+                    </select>
                 </div>
-            </div>
-        </div>
-        <br>
-        
-        <div class="nav-bar">
-            {% for h_key in hosts %}
-                <a href="{{ url_for('index', hostname=h_key) }}" {% if selected_host == h_key %}class="active"{% endif %}>{{ h_key }} </a>
-                <!-- Change 'hostname' to 'hostname_key' -->
-                <a href="{{ url_for('process_task', hostname_key=h_key) }}">Processes</a>
-            {% endfor %}
+
+                <div class="form-group">
+                    <label for="grep_query">Search Query:</label>
+                    <input type="text" name="grep_query" id="grep_query" placeholder="e.g., 'error'">
+                </div>
+
+                <div class="button-group">
+                    <button type="submit">Search Logs</button>
+                    <button type="button" id="tail-button">Start Live Tail</button>
+                </div>
+            </form>
         </div>
 
-
-        <script>
-            document.addEventListener('DOMContentLoaded', function() {
-                const tailButton = document.getElementById('tail-button');
-                const logFileTailSelect = document.getElementById('log_file_tail');
-                const hostnameKey = "{{ selected_host }}";
-        
-                tailButton.addEventListener('click', function() {
-                    const filename = logFileTailSelect.value;
-                    if (filename) {
-                        const url = "{{ url_for('tail_log', hostname_key='__hostname__', filename='__filename__') }}";
-                        const finalUrl = url.replace('__hostname__', hostnameKey).replace('__filename__', filename);
-                        window.location.href = finalUrl;
-                    } else {
-                        alert('Please select a log file for live tail.');
-                    }
-                });
-            });
-        </script>
-        
+        <div class="card">
+            <h3>Filter File List</h3>
+            <form action="/" method="GET">
+                <input type="hidden" name="hostname" value="{{ selected_host }}">
+                <div class="form-group">
+                    <label for="filename_filter">Filter Filename:</label>
+                    <input type="text" name="filename_filter" id="filename_filter" value="{{ filename_filter }}" placeholder="e.g., 'dealhub'">
+                </div>
+                <button type="submit">Filter Files</button>
+            </form>
+        </div>
+    </main>
+    
     <script>
-        function updateForms() {
-            const selectedHost = document.getElementById('hostname_select').value;
-            // Update hidden hostname fields for each form
-            document.getElementById('filter-hostname').value = selectedHost;
-            document.getElementById('grep-hostname').value = selectedHost;
-            document.getElementById('search-hostname').value = selectedHost;
-
-            // Redirect to update the file list
-            window.location.href = `/?hostname=${selectedHost}`;
-        }
-        
-        document.getElementById('tail-button').addEventListener('click', function() {
-            const selectedLog = document.getElementById('log_file_grep').value;
-            const selectedHost = document.getElementById('hostname_select').value;
-            if (selectedLog && selectedHost) {
-                window.location.href = `/tail/${selectedHost}/${selectedLog}`;
-            } else {
-                alert('Please select a log file and host.');
-            }
+        document.addEventListener('DOMContentLoaded', function() {
+            const tailButton = document.getElementById('tail-button');
+            const logFileSelect = document.getElementById('log_file_search');
+            const hostnameKey = "{{ selected_host }}";
+    
+            tailButton.addEventListener('click', function() {
+                const filename = logFileSelect.value;
+                if (filename) {
+                    const url = "{{ url_for('tail_log', hostname_key='__hostname__', filename='__filename__') }}";
+                    const finalUrl = url.replace('__hostname__', hostnameKey).replace('__filename__', filename);
+                    window.location.href = finalUrl;
+                } else {
+                    alert('Please select a log file for live tail.');
+                }
+            });
         });
     </script>
 </body>
