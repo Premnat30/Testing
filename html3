@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Tailing: {{ log_file }} from {{ hostname_key }}</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/skeleton/2.0.4/skeleton.min.css">
+    <style>
+        body { margin: 20px; }
+        .container { margin-top: 50px; }
+        pre#log-container {
+            height: 80vh;
+            overflow-y: scroll;
+            background-color: #f4f4f4;
+            padding: 10px;
+            border: 1px solid #ccc;
+            white-space: pre-wrap; /* Wrap text to prevent horizontal scrolling */
+            word-wrap: break-word;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .back-link { margin-top: 20px; display: inline-block; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Tailing: {{ log_file }} from {{ hostname_key }}</h1>
+        <pre id="log-container"></pre>
+        <a href="/?hostname={{ hostname_key }}" class="back-link">Back to file list</a>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', (event) => {
+            const logContainer = document.getElementById('log-container');
+            const logFile = "{{ log_file }}";
+            const hostnameKey = "{{ hostname_key }}";
+            const eventSource = new EventSource(`/stream/${hostnameKey}/${logFile}`);
+
+            eventSource.onmessage = function(event) {
+                const line = event.data;
+                logContainer.textContent += line + '\n';
+                // Auto-scroll to the bottom.
+                logContainer.scrollTop = logContainer.scrollHeight;
+            };
+
+            eventSource.onerror = function(err) {
+                console.error("EventSource failed:", err);
+                eventSource.close();
+                logContainer.textContent += "\n--- Connection closed ---";
+            };
+        });
+    </script>
+</body>
+</html>
