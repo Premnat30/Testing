@@ -1,0 +1,70 @@
+python
+import os
+import paramiko
+from flask import Flask, render_template, request, Response, abort, jsonify, stream_with_context
+import logging
+from config import get_host_config  # Import the function
+
+app = Flask(__name__)
+
+def _get_ssh_client(hostname_config):
+    """
+    Establishes an SSH connection to a remote host, assuming key-based auth.
+    No password is used.
+    """
+    try:
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client.connect(
+            hostname=hostname_config['hostname'],
+            username=hostname_config['username'],
+            look_for_keys=True,  # Assuming SSH keys are configured for passwordless access
+            timeout=10
+        )
+        return client
+    except paramiko.AuthenticationException:
+        app.logger.error(f"Authentication failed for {hostname_config['hostname']}. Check SSH keys.")
+        return None
+    except Exception as e:
+        app.logger.error(f"SSH connection failed for {hostname_config['hostname']}: {e}")
+        return None
+
+# --- Index Route for Log Searching ---
+@app.route('/')
+def index():
+    # You can get the host keys by calling the function and iterating through the dictionary
+    host_keys = get_host_config(None) # Call with dummy argument to get the full dictionary
+    hosts = list(host_keys.keys())
+
+    hostname_key = request.args.get('hostname')
+    if not hostname_key or hostname_key not in hosts:
+        hostname_key = hosts[0] if hosts else None
+
+    if not hostname_key:
+        return "No host configurations found.", 500
+
+    hostname_config = get_host_config(hostname_key)
+    client = _get_ssh_client(hostname_config)
+    if not client:
+        return f"Failed to connect to host: {hostname_key}", 500
+
+    filename_filter = request.args.get('filename_filter', '').lower()
+    log_files = []
+    try:
+        stdin, stdout, stderr = client.exec_command(f"ls {hostname_config['log_dir']}")
+        all_files = stdout.read().decode().strip().split('\n')
+        client.close()
+        if filename_filter:
+            log_files = [f for f in all_files if filename_filter in f.lower()]
+        else:
+            log_files = all_files
+        log_files.sort()
+    except Exception as e:
+        return f"An error occurred while reading the remote log directory: {e}", 500
+
+    return render_template('search.html',
+        log_files=log_files,
+        filename_filter=filename_filter,
+        hosts=hosts,
+        selected_host=hostname_key
+    )
