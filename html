@@ -1,0 +1,158 @@
+<!-- templates/search.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Log Search</title>
+    <style>
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Search Log Files</h1>
+
+        <!-- Host Selection -->
+        <div class="row">
+            <div class="two columns">
+                <label for="host_select">Switch Host</label>
+                <select id="host_select" name="hostname" onchange="location = this.value;">
+                    {% for host in hosts %}
+                        <option value="{{ url_for('index', hostname=host) }}" {% if host == selected_host %} selected {% endif %}>
+                            {{ host }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="ten columns">
+                <h4>Logs for {{ selected_host }}</h4>
+        
+
+             
+                
+                
+        <!-- Filter Form -->
+        <form id="filter-form" action="/" method="GET" class="form-group">
+            <input type="hidden" name="hostname" id="filter-hostname" value="{{ selected_host }}">
+            <label for="filename_filter">Filter Log Files:</label>
+            <input type="text" name="filename_filter" id="filename_filter" 
+                   value="{{ filename_filter }}" placeholder="e.g., 'dealhub'" 
+                   style="width: 300px; padding: 5px;">
+            <button type="submit">Filter</button>
+        </form> <br>
+        
+        <!-- Grep Search Form -->
+        <form id="grep-form" action="/grep" method="GET">
+            <input type="hidden" name="hostname" id="grep-hostname" value="{{ selected_host }}">
+            <div class="form-group">
+                <label for="log_file_grep">Select Log File for Grep:</label>
+                <select name="log_file" id="log_file_grep" style="width: 300px; padding: 5px;">
+                    {% for file in log_files %}
+                        <option value="{{ file }}">{{ file }}</option>
+                    {% else %}
+                        <option value="">No files found. Try another filter.</option>
+                    {% endfor %}
+                </select>
+            </div><br>
+            <div class="form-group"> 
+                <label for="grep_query">Grep Search Term:</label>
+                <input type="text" name="grep_query" id="grep_query" placeholder="e.g., 'error'" style="width: 300px; padding: 5px;"> <button type="submit">Grep Search</button>
+            </div>
+            </form>
+<br>
+
+        <!--Search Form -->
+        <form id="search-form" action="/search" method="GET">
+            <input type="hidden" name="hostname" id="search-hostname" value="{{ selected_host }}">
+            <div class="form-group">
+                <label for="log_file_search">Select Log File for Simple Search:</label>
+                <select name="log_file" id="log_file_search" style="width: 300px; padding: 5px;">
+                    {% for file in log_files %}
+                        <option value="{{ file }}">{{ file }}</option>
+                    {% else %}
+                        <option value="">No files found. Try another filter.</option>
+                    {% endfor %}
+                </select>
+            </div><br>
+            
+            <div class="form-group">
+                <label for="query">Search Term (case-insensitive):</label>
+                <input type="text" name="query" id="query" placeholder="e.g., 'error, debug'" style="width: 300px; padding: 5px;">
+                <button type="submit">Search</button>
+            </div>
+            </form> </div><br>
+
+
+        <!-- Tail Button -->
+        <div class="row" style="margin-top: 20px;">
+            <div class="twelve columns">
+                <h4>Live Tail on {{ selected_host }}</h4>
+                <div class="row">
+                    <div class="eight columns">
+                        <label for="log_file_tail">Select Log File for Live Tail:</label>
+                        <select id="log_file_tail" class="u-full-width" required>
+                            <option value="" disabled selected>-- Select a log file --</option>
+                            {% for file in log_files %}
+                                <option value="{{ file }}">{{ file }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="four columns">
+                        <button class="button-primary" id="tail-button" style="margin-top: 24px;">Start Live Tail</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <br>
+        
+        <div class="nav-bar">
+            {% for h_key in hosts %}
+                <a href="{{ url_for('index', hostname=h_key) }}" {% if selected_host == h_key %}class="active"{% endif %}>{{ h_key }} </a>
+                <!-- Change 'hostname' to 'hostname_key' -->
+                <a href="{{ url_for('process_task', hostname_key=h_key) }}">Processes</a>
+            {% endfor %}
+        </div>
+
+
+        <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                const tailButton = document.getElementById('tail-button');
+                const logFileTailSelect = document.getElementById('log_file_tail');
+                const hostnameKey = "{{ selected_host }}";
+        
+                tailButton.addEventListener('click', function() {
+                    const filename = logFileTailSelect.value;
+                    if (filename) {
+                        const url = "{{ url_for('tail_log', hostname_key='__hostname__', filename='__filename__') }}";
+                        const finalUrl = url.replace('__hostname__', hostnameKey).replace('__filename__', filename);
+                        window.location.href = finalUrl;
+                    } else {
+                        alert('Please select a log file for live tail.');
+                    }
+                });
+            });
+        </script>
+        
+    <script>
+        function updateForms() {
+            const selectedHost = document.getElementById('hostname_select').value;
+            // Update hidden hostname fields for each form
+            document.getElementById('filter-hostname').value = selectedHost;
+            document.getElementById('grep-hostname').value = selectedHost;
+            document.getElementById('search-hostname').value = selectedHost;
+
+            // Redirect to update the file list
+            window.location.href = `/?hostname=${selectedHost}`;
+        }
+        
+        document.getElementById('tail-button').addEventListener('click', function() {
+            const selectedLog = document.getElementById('log_file_grep').value;
+            const selectedHost = document.getElementById('hostname_select').value;
+            if (selectedLog && selectedHost) {
+                window.location.href = `/tail/${selectedHost}/${selectedLog}`;
+            } else {
+                alert('Please select a log file and host.');
+            }
+        });
+    </script>
+</body>
+</html>
