@@ -146,8 +146,22 @@
     <main class="container">
         <h2>Logs for {{ selected_host }}</h2>
 
+        <!-- The "Filter File List" section is now first -->
         <div class="card">
-            <h3>Search and Filter</h3>
+            <h3>Filter File List</h3>
+            <form action="/" method="GET">
+                <input type="hidden" name="hostname" value="{{ selected_host }}">
+                <div class="form-group">
+                    <label for="filename_filter">Filter Filename:</label>
+                    <input type="text" name="filename_filter" id="filename_filter" value="{{ filename_filter }}" placeholder="e.g., 'dealhub'">
+                </div>
+                <button type="submit">Filter Files</button>
+            </form>
+        </div>
+
+        <!-- The "Search and Filter" section is now second -->
+        <div class="card">
+            <h3>Search and Live Tail</h3>
             <form action="/grep" method="GET">
                 <input type="hidden" name="hostname" value="{{ selected_host }}">
                 
@@ -173,18 +187,6 @@
                 </div>
             </form>
         </div>
-
-        <div class="card">
-            <h3>Filter File List</h3>
-            <form action="/" method="GET">
-                <input type="hidden" name="hostname" value="{{ selected_host }}">
-                <div class="form-group">
-                    <label for="filename_filter">Filter Filename:</label>
-                    <input type="text" name="filename_filter" id="filename_filter" value="{{ filename_filter }}" placeholder="e.g., 'dealhub'">
-                </div>
-                <button type="submit">Filter Files</button>
-            </form>
-        </div>
     </main>
     
     <script>
@@ -196,9 +198,9 @@
             tailButton.addEventListener('click', function() {
                 const filename = logFileSelect.value;
                 if (filename) {
-                    const url = "{{ url_for('tail_log', hostname_key='__hostname__', filename='__filename__') }}";
-                    const finalUrl = url.replace('__hostname__', hostnameKey).replace('__filename__', filename);
-                    window.location.href = finalUrl;
+                    // Assuming you have a /tail endpoint configured in your Flask app
+                    const url = `/tail/${hostnameKey}/${filename}`;
+                    window.location.href = url;
                 } else {
                     alert('Please select a log file for live tail.');
                 }
