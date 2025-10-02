@@ -2,40 +2,272 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Search Results</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Search Results - Log Monitor</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
-        body { font-family: sans-serif; }
-        .container { max-width: 800px; margin: auto; padding: 20px; }
-        pre { background-color: #f4f4f4; padding: 10px; border: 1px solid #ddd; white-space: pre-wrap; word-wrap: break-word; }
-        /* New styles for highlighting */
-        .error-highlight {
-            color: red;
-            font-weight: bold; /* Optional: Make it bold for emphasis */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f8f9fa;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            margin-bottom: 25px;
+        }
+
+        .header h1 {
+            color: #2c3e50;
+            font-size: 28px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header h1 i {
+            color: #3498db;
+        }
+
+        .search-info {
+            background: #e8f4f8;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #3498db;
+        }
+
+        .search-info p {
+            margin-bottom: 8px;
+            color: #2c3e50;
+        }
+
+        .search-info strong {
+            color: #3498db;
+        }
+
+        .results-count {
+            background: #28a745;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .back-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: #6c757d;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            margin-top: 10px;
+        }
+
+        .back-btn:hover {
+            background: #545b62;
+            transform: translateY(-1px);
+        }
+
+        .results-container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .results-header {
+            background: #2c3e50;
+            color: white;
+            padding: 20px;
+            display: flex;
+            justify-content: between;
+            align-items: center;
+        }
+
+        .results-header h2 {
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .results-content {
+            padding: 0;
+        }
+
+        .log-entry {
+            padding: 15px 20px;
+            border-bottom: 1px solid #e9ecef;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            transition: background-color 0.2s ease;
+        }
+
+        .log-entry:hover {
+            background-color: #f8f9fa;
+        }
+
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+
+        .error-highlight {
+            color: #dc3545;
+            font-weight: 700;
+            background-color: #fde8e8;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+
         .warning-highlight {
-            color: orange; /* Using orange for better visibility against #f4f4f4 background */
-            font-weight: bold; /* Optional: Make it bold for emphasis */
+            color: #e67e22;
+            font-weight: 700;
+            background-color: #fef5e7;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+
+        .info-highlight {
+            color: #3498db;
+            font-weight: 700;
+            background-color: #e8f4f8;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+
+        .query-highlight {
+            background-color: #fff3cd;
+            font-weight: 600;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #6c757d;
+        }
+
+        .empty-state i {
+            font-size: 64px;
+            margin-bottom: 20px;
+            color: #bdc3c7;
+        }
+
+        .empty-state h3 {
+            font-size: 24px;
+            margin-bottom: 10px;
+            color: #495057;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+            }
+            
+            .header {
+                padding: 20px;
+            }
+            
+            .header h1 {
+                font-size: 24px;
+            }
+            
+            .log-entry {
+                padding: 12px 15px;
+                font-size: 12px;
+            }
         }
     </style>
 </head>
 <body>
-
     <div class="container">
-        <h1>Search Results</h1>
-        <p>Showing results for `{{ query }}` in `{{ selected_log }}`.</p>
-        <a href="/?hostname={{ hostname_key }}" class="back-link">Back to file list</a>
+        <div class="header">
+            <h1>
+                <i class="fas fa-search"></i>
+                Search Results
+            </h1>
+            
+            <div class="search-info">
+                <p>
+                    <i class="fas fa-file-lines"></i>
+                    <strong>File:</strong> {{ selected_log }}
+                </p>
+                <p>
+                    <i class="fas fa-magnifying-glass"></i>
+                    <strong>Search Query:</strong> "{{ query }}"
+                </p>
+                {% if results %}
+                <div class="results-count">
+                    <i class="fas fa-check-circle"></i>
+                    {{ results|length }} matching line{{ 's' if results|length != 1 }}
+                </div>
+                {% endif %}
+            </div>
+
+            <a href="/?hostname={{ selected_host }}" class="back-btn">
+                <i class="fas fa-arrow-left"></i>
+                Back to File List
+            </a>
+        </div>
+
         {% if results %}
-            <p>Found {{ results|length }} matching lines:</p>
-            <pre>
+        <div class="results-container">
+            <div class="results-header">
+                <h2>
+                    <i class="fas fa-list"></i>
+                    Matching Log Entries
+                </h2>
+            </div>
+            <div class="results-content">
                 {% for line in results %}
-                    {{ line | replace('ERROR', '<span class="error-highlight">ERROR</span>') | replace('Warning', '<span class="warning-highlight">Warning</span>') | safe }}
+                <div class="log-entry">
+                    {{ line | replace('ERROR', '<span class="error-highlight">ERROR</span>') | 
+                          replace('WARNING', '<span class="warning-highlight">WARNING</span>') | 
+                          replace('Warning', '<span class="warning-highlight">Warning</span>') | 
+                          replace('INFO', '<span class="info-highlight">INFO</span>') | 
+                          replace(query, '<span class="query-highlight">' ~ query ~ '</span>') | safe }}
+                </div>
                 {% endfor %}
-            </pre>
+            </div>
+        </div>
         {% else %}
-            <p>No matching logs found.</p>
+        <div class="empty-state">
+            <i class="fas fa-inbox"></i>
+            <h3>No Results Found</h3>
+            <p>No matching log entries were found for your search query.</p>
+            <p style="margin-top: 15px; font-size: 14px; color: #6c757d;">
+                Try adjusting your search terms or check another log file.
+            </p>
+        </div>
         {% endif %}
     </div>
-    
-   
 </body>
 </html>
