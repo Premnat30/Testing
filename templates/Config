@@ -73,6 +73,20 @@ def get_host_credentials(hostname_key):
     credentials = session.get('credentials', {})
     return credentials.get(hostname_key, {})
 
+# --- Form state management ---
+def save_form_state(hostname_key, form_data):
+    """Save form state for a specific host"""
+    if 'form_states' not in session:
+        session['form_states'] = {}
+    session['form_states'][hostname_key] = form_data
+    session.modified = True
+
+def get_form_state(hostname_key):
+    """Get form state for a specific host"""
+    if 'form_states' not in session:
+        return {}
+    return session['form_states'].get(hostname_key, {})
+
 # --- Authentication Route ---
 @app.route('/authenticate', methods=['GET', 'POST'])
 def authenticate():
@@ -95,6 +109,16 @@ def authenticate():
         if authenticated_hosts:
             session['credentials'] = authenticated_hosts
             session['current_user'] = username
+            # Initialize form states for all authenticated hosts
+            if 'form_states' not in session:
+                session['form_states'] = {}
+            for host_key in authenticated_hosts.keys():
+                if host_key not in session['form_states']:
+                    session['form_states'][host_key] = {
+                        'filename_filter': '',
+                        'selected_log_file': '',
+                        'search_query': ''
+                    }
             return redirect(url_for('index'))
         else:
             return render_template('authenticate.html', 
@@ -124,7 +148,18 @@ def index():
         session.get('credentials', {}).pop(hostname_key, None)
         return redirect(url_for('authenticate'))
 
-    filename_filter = request.args.get('filename_filter', '').lower()
+    # Get form state from session or request parameters
+    form_state = get_form_state(hostname_key)
+    filename_filter = request.args.get('filename_filter', form_state.get('filename_filter', ''))
+    
+    # Update form state with current values
+    current_form_state = {
+        'filename_filter': filename_filter,
+        'selected_log_file': form_state.get('selected_log_file', ''),
+        'search_query': form_state.get('search_query', '')
+    }
+    save_form_state(hostname_key, current_form_state)
+
     log_files = []
     try:
         stdin, stdout, stderr = client.exec_command(f"ls {hostname_config['log_dir']}")
@@ -143,7 +178,8 @@ def index():
         filename_filter=filename_filter,
         hosts=HOST_CONFIG.keys(),
         selected_host=hostname_key,
-        username=session.get('current_user', 'Unknown')
+        username=session.get('current_user', 'Unknown'),
+        form_state=current_form_state
     )
 
 # --- Process Task Route ---
@@ -186,10 +222,20 @@ LOGS_DIR = os.path.abspath('/apps/logs/s2bxtb01/')
 
 @app.route('/search', methods=['GET'])
 def search_logs():
+    # Get parameters from request or form state
+    hostname_key = request.args.get('hostname')
     selected_log = request.args.get('log_file')
     query = request.args.get('query', '')
-    hostname_key = request.args.get('hostname')
-    results = []
+    
+    # Update form state with current search values
+    if hostname_key:
+        form_state = get_form_state(hostname_key)
+        updated_form_state = {
+            'filename_filter': form_state.get('filename_filter', ''),
+            'selected_log_file': selected_log,
+            'search_query': query
+        }
+        save_form_state(hostname_key, updated_form_state)
 
     if not selected_log:
         return "No log file selected.", 400
@@ -200,6 +246,7 @@ def search_logs():
     if not real_requested_path.startswith(LOGS_DIR):
         return "Invalid log file path.", 400
 
+    results = []
     try:
         with open(real_requested_path, 'r', encoding='utf-8', errors='ignore') as log_file:
             for line in log_file:
@@ -282,9 +329,24 @@ def follow_remote(client, log_file_path):
     finally:
         client.close()
 
+# --- Clear Form State Route ---
+@app.route('/clear_form_state/<hostname_key>')
+def clear_form_state(hostname_key):
+    """Clear form state for a specific host"""
+    if 'form_states' in session and hostname_key in session['form_states']:
+        session['form_states'][hostname_key] = {
+            'filename_filter': '',
+            'selected_log_file': '',
+            'search_query': ''
+        }
+        session.modified = True
+    return redirect(url_for('index', hostname=hostname_key))
+
 # --- Logout Route ---
 @app.route('/logout')
 def logout():
     session.clear()
     return redirect(url_for('authenticate'))
 
+if __name__ == '__main__':
+    app.run(host='10.198.23.92', port=5000, debug=True)
