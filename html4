@@ -3,75 +3,260 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Processes on {{ host_name }}</title>
+    <title>Processes - {{ host_name }}</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        h1, h2 { color: #333; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background-color: #f2f2f2; cursor: pointer; } /* Add pointer cursor to headers */
-        th:hover { background-color: #e9e9e9; }
-        th.sorted-asc::after { content: " ▲"; }
-        th.sorted-desc::after { content: " ▼"; }
-        .error { color: red; font-weight: bold; }
-        .nav-bar { background-color: #f0f0f0; padding: 10px; margin-bottom: 20px; }
-        .nav-bar a { text-decoration: none; padding: 8px 12px; margin-right: 5px; background-color: #e9e9e9; border: 1px solid #ccc; border-radius: 4px; color: #333; }
-        .nav-bar a:hover { background-color: #ddd; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f8f9fa;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header h1 i {
+            color: #3498db;
+        }
+
+        .nav {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .nav-btn {
+            padding: 8px 16px;
+            background: #ecf0f1;
+            border: none;
+            border-radius: 6px;
+            text-decoration: none;
+            color: #2c3e50;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .nav-btn:hover {
+            background: #3498db;
+            color: white;
+            transform: translateY(-2px);
+        }
+
+        .nav-btn.active {
+            background: #3498db;
+            color: white;
+        }
+
+        .nav-btn.logs {
+            background: #e8f5e8;
+            color: #27ae60;
+        }
+
+        .error {
+            background: #fee;
+            color: #c0392b;
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 4px solid #c0392b;
+            margin-bottom: 20px;
+        }
+
+        .table-container {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead {
+            background: #2c3e50;
+            color: white;
+        }
+
+        th {
+            padding: 12px 15px;
+            text-align: left;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s ease;
+            white-space: nowrap;
+        }
+
+        th:hover {
+            background: #34495e;
+        }
+
+        th.sorted-asc::after {
+            content: " ↑";
+            font-weight: bold;
+        }
+
+        th.sorted-desc::after {
+            content: " ↓";
+            font-weight: bold;
+        }
+
+        tbody tr {
+            border-bottom: 1px solid #ecf0f1;
+            transition: background 0.3s ease;
+        }
+
+        tbody tr:hover {
+            background: #f8f9fa;
+        }
+
+        td {
+            padding: 10px 15px;
+            vertical-align: top;
+        }
+
+        .command-cell {
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #7f8c8d;
+        }
+
+        .empty-state i {
+            font-size: 48px;
+            margin-bottom: 15px;
+            color: #bdc3c7;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .table-container {
+                overflow-x: auto;
+            }
+            
+            table {
+                min-width: 800px;
+            }
+            
+            .nav {
+                flex-direction: column;
+            }
+        }
     </style>
 </head>
 <body>
-    <h1>Process List for {{ host_name }}</h1>
+    <div class="container">
+        <div class="header">
+            <h1>
+                <i class="fas fa-microchip"></i>
+                Processes - {{ host_name }}
+            </h1>
+            <div class="nav">
+                {% for h_key in hosts %}
+                    <a href="{{ url_for('process_task', hostname_key=h_key) }}" 
+                       class="nav-btn {% if h_key == host_name %}active{% endif %}">
+                        <i class="fas fa-server"></i>
+                        {{ h_key }}
+                    </a>
+                {% endfor %}
+                <a href="{{ url_for('index') }}" class="nav-btn logs">
+                    <i class="fas fa-search"></i>
+                    Log Search
+                </a>
+            </div>
+        </div>
 
-    <div class="nav-bar">
-        {% for h_key in hosts %}
-            <a href="{{ url_for('process_task', hostname_key=h_key) }}">{{ h_key }} Processes</a>
-        {% endfor %}
-        | <a href="{{ url_for('index') }}">Log Search</a>
+        {% if error %}
+            <div class="error">
+                <i class="fas fa-exclamation-triangle"></i>
+                {{ error }}
+            </div>
+        {% elif processes %}
+            <div class="table-container">
+                <table id="process-table">
+                    <thead>
+                        <tr>
+                            <th onclick="sortTable(0, 'string')">User</th>
+                            <th onclick="sortTable(1, 'number')">PID</th>
+                            <th onclick="sortTable(2, 'number')">CPU%</th>
+                            <th onclick="sortTable(3, 'number')">MEM%</th>
+                            <th onclick="sortTable(4, 'number')">VSZ</th>
+                            <th onclick="sortTable(5, 'number')">RSS</th>
+                            <th onclick="sortTable(6, 'string')">TTY</th>
+                            <th onclick="sortTable(7, 'string')">STAT</th>
+                            <th onclick="sortTable(8, 'string')">START</th>
+                            <th onclick="sortTable(9, 'string')">TIME</th>
+                            <th onclick="sortTable(10, 'string')">COMMAND</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for process in processes %}
+                            <tr>
+                                <td>{{ process.user }}</td>
+                                <td>{{ process.pid }}</td>
+                                <td>{{ process.cpu }}</td>
+                                <td>{{ process.mem }}</td>
+                                <td>{{ process.vsz }}</td>
+                                <td>{{ process.rss }}</td>
+                                <td>{{ process.tty }}</td>
+                                <td>{{ process.stat }}</td>
+                                <td>{{ process.start }}</td>
+                                <td>{{ process.time }}</td>
+                                <td class="command-cell" title="{{ process.command }}">{{ process.command }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="empty-state">
+                <i class="fas fa-inbox"></i>
+                <h3>No Processes Found</h3>
+                <p>No processes were found or an unknown error occurred.</p>
+            </div>
+        {% endif %}
     </div>
 
-    {% if error %}
-        <p class="error">{{ error }}</p>
-    {% elif processes %}
-        <table id="process-table">
-            <thead>
-                <tr>
-                    <th onclick="sortTable(0, 'string')" class="sortable">User</th>
-                    <th onclick="sortTable(1, 'number')" class="sortable">PID</th>
-                    <th onclick="sortTable(2, 'number')" class="sortable">%CPU</th>
-                    <th onclick="sortTable(3, 'number')" class="sortable">%MEM</th>
-                    <th onclick="sortTable(4, 'number')" class="sortable">VSZ</th>
-                    <th onclick="sortTable(5, 'number')" class="sortable">RSS</th>
-                    <th onclick="sortTable(6, 'string')" class="sortable">TTY</th>
-                    <th onclick="sortTable(7, 'string')" class="sortable">STAT</th>
-                    <th onclick="sortTable(8, 'string')" class="sortable">START</th>
-                    <th onclick="sortTable(9, 'string')" class="sortable">TIME</th>
-                    <th onclick="sortTable(10, 'string')" class="sortable">COMMAND</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for process in processes %}
-                    <tr>
-                        <td>{{ process.user }}</td>
-                        <td>{{ process.pid }}</td>
-                        <td>{{ process.cpu }}</td>
-                        <td>{{ process.mem }}</td>
-                        <td>{{ process.vsz }}</td>
-                        <td>{{ process.rss }}</td>
-                        <td>{{ process.tty }}</td>
-                        <td>{{ process.stat }}</td>
-                        <td>{{ process.start }}</td>
-                        <td>{{ process.time }}</td>
-                        <td>{{ process.command }}</td>
-                    </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    {% else %}
-        <p>No processes found or an unknown error occurred.</p>
-    {% endif %}
-
     <script>
-        // Store the current sort column and direction
         let currentSortColumn = -1;
         let isAscending = true;
 
@@ -79,7 +264,7 @@
             const table = document.getElementById("process-table");
             const tbody = table.querySelector("tbody");
             const rows = Array.from(tbody.querySelectorAll("tr"));
-            const headers = table.querySelectorAll("th.sortable");
+            const headers = table.querySelectorAll("th");
 
             // Reset header classes
             headers.forEach(h => h.classList.remove('sorted-asc', 'sorted-desc'));
@@ -92,11 +277,11 @@
                 isAscending = true;
             }
 
-            // Add new header class for visual indicator
+            // Add visual indicator to current header
             const currentHeader = headers[columnIndex];
             currentHeader.classList.add(isAscending ? 'sorted-asc' : 'sorted-desc');
 
-            // Sort the rows
+            // Sort rows
             rows.sort((a, b) => {
                 const aText = a.cells[columnIndex].textContent.trim();
                 const bText = b.cells[columnIndex].textContent.trim();
@@ -104,23 +289,17 @@
                 let aValue = aText;
                 let bValue = bText;
 
-                // Handle different data types for correct sorting
                 if (dataType === 'number') {
-                    aValue = parseFloat(aText);
-                    bValue = parseFloat(bText);
+                    aValue = parseFloat(aText) || 0;
+                    bValue = parseFloat(bText) || 0;
                 }
                 
-                // Compare values
-                if (aValue < bValue) {
-                    return isAscending ? -1 : 1;
-                } else if (aValue > bValue) {
-                    return isAscending ? 1 : -1;
-                } else {
-                    return 0;
-                }
+                if (aValue < bValue) return isAscending ? -1 : 1;
+                if (aValue > bValue) return isAscending ? 1 : -1;
+                return 0;
             });
 
-            // Re-append the sorted rows to the table body
+            // Re-append sorted rows
             rows.forEach(row => tbody.appendChild(row));
         }
     </script>
