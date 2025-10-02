@@ -2,51 +2,409 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Tailing: {{ log_file }} from {{ hostname_key }}</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/skeleton/2.0.4/skeleton.min.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Tail - {{ log_file }}</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
-        body { margin: 20px; }
-        .container { margin-top: 50px; }
-        pre#log-container {
-            height: 80vh;
-            overflow-y: scroll;
-            background-color: #f4f4f4;
-            padding: 10px;
-            border: 1px solid #ccc;
-            white-space: pre-wrap; /* Wrap text to prevent horizontal scrolling */
-            word-wrap: break-word;
-            font-family: monospace;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+            line-height: 1.6;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+        }
+
+        .header {
+            background: #2d2d2d;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        .header h1 {
+            color: #ffffff;
+            font-size: 24px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header h1 i {
+            color: #00d4aa;
+        }
+
+        .file-info {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            color: #b0b0b0;
             font-size: 14px;
         }
-        .back-link { margin-top: 20px; display: inline-block; }
+
+        .info-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #3d3d3d;
+            padding: 8px 12px;
+            border-radius: 6px;
+        }
+
+        .info-item i {
+            color: #00d4aa;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: #00d4aa;
+            color: #000;
+        }
+
+        .btn-primary:hover {
+            background: #00b894;
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #545b62;
+            transform: translateY(-1px);
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+            transform: translateY(-1px);
+        }
+
+        .log-container-wrapper {
+            flex: 1;
+            background: #000;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .log-header {
+            background: #2d2d2d;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #404040;
+        }
+
+        .log-header h2 {
+            font-size: 16px;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #00d4aa;
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.disconnected {
+            background: #dc3545;
+            animation: none;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        #log-container {
+            flex: 1;
+            background: #000;
+            color: #00ff00;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 13px;
+            line-height: 1.4;
+            padding: 20px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            border: none;
+        }
+
+        /* Scrollbar styling */
+        #log-container::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        #log-container::-webkit-scrollbar-track {
+            background: #1a1a1a;
+        }
+
+        #log-container::-webkit-scrollbar-thumb {
+            background: #404040;
+            border-radius: 4px;
+        }
+
+        #log-container::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
+        /* Log level highlighting */
+        .log-error { color: #ff6b6b; }
+        .log-warning { color: #ffd93d; }
+        .log-info { color: #4ecdc4; }
+        .log-debug { color: #a0a0a0; }
+
+        .connection-status {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #2d2d2d;
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-size: 12px;
+            color: #b0b0b0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+            }
+            
+            .header {
+                padding: 15px;
+            }
+            
+            .file-info {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .controls {
+                flex-wrap: wrap;
+            }
+            
+            .log-header {
+                padding: 12px 15px;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Tailing: {{ log_file }} from {{ hostname_key }}</h1>
-        <pre id="log-container"></pre>
-        <a href="/?hostname={{ hostname_key }}" class="back-link">Back to file list</a>
+        <div class="header">
+            <h1>
+                <i class="fas fa-terminal"></i>
+                Live Tail
+            </h1>
+            <div class="file-info">
+                <div class="info-item">
+                    <i class="fas fa-file-lines"></i>
+                    <span>File: {{ log_file }}</span>
+                </div>
+                <div class="info-item">
+                    <i class="fas fa-server"></i>
+                    <span>Host: {{ hostname_key }}</span>
+                </div>
+            </div>
+            <div class="controls">
+                <a href="/?hostname={{ hostname_key }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i>
+                    Back to Files
+                </a>
+                <button id="clear-btn" class="btn btn-primary">
+                    <i class="fas fa-broom"></i>
+                    Clear Logs
+                </button>
+                <button id="pause-btn" class="btn btn-danger">
+                    <i class="fas fa-pause"></i>
+                    Pause
+                </button>
+            </div>
+        </div>
+
+        <div class="log-container-wrapper">
+            <div class="log-header">
+                <h2>
+                    <i class="fas fa-play"></i>
+                    Live Output
+                </h2>
+                <div class="status-indicator">
+                    <div class="status-dot" id="status-dot"></div>
+                    <span id="status-text">Connected</span>
+                </div>
+            </div>
+            <pre id="log-container"></pre>
+        </div>
     </div>
-    
+
+    <div class="connection-status">
+        <i class="fas fa-wifi"></i>
+        <span>Streaming live from {{ hostname_key }}</span>
+    </div>
+
     <script>
-        document.addEventListener('DOMContentLoaded', (event) => {
+        document.addEventListener('DOMContentLoaded', () => {
             const logContainer = document.getElementById('log-container');
+            const statusDot = document.getElementById('status-dot');
+            const statusText = document.getElementById('status-text');
+            const clearBtn = document.getElementById('clear-btn');
+            const pauseBtn = document.getElementById('pause-btn');
+            
             const logFile = "{{ log_file }}";
             const hostnameKey = "{{ hostname_key }}";
-            const eventSource = new EventSource(`/stream/${hostnameKey}/${logFile}`);
+            
+            let eventSource = null;
+            let isPaused = false;
+            let buffer = [];
 
-            eventSource.onmessage = function(event) {
-                const line = event.data;
-                logContainer.textContent += line + '\n';
-                // Auto-scroll to the bottom.
+            function connect() {
+                eventSource = new EventSource(`/stream/${hostnameKey}/${logFile}`);
+                
+                eventSource.onopen = () => {
+                    statusDot.classList.remove('disconnected');
+                    statusText.textContent = 'Connected';
+                    console.log('SSE connection opened');
+                };
+
+                eventSource.onmessage = (event) => {
+                    if (isPaused) {
+                        buffer.push(event.data);
+                        return;
+                    }
+                    
+                    const line = event.data;
+                    appendLogLine(line);
+                };
+
+                eventSource.onerror = (err) => {
+                    console.error('EventSource failed:', err);
+                    statusDot.classList.add('disconnected');
+                    statusText.textContent = 'Disconnected';
+                    
+                    // Attempt to reconnect after 3 seconds
+                    setTimeout(() => {
+                        if (eventSource) eventSource.close();
+                        connect();
+                    }, 3000);
+                };
+            }
+
+            function appendLogLine(line) {
+                const div = document.createElement('div');
+                
+                // Apply log level coloring
+                if (line.includes('ERROR') || line.includes('error')) {
+                    div.className = 'log-error';
+                } else if (line.includes('WARNING') || line.includes('warning')) {
+                    div.className = 'log-warning';
+                } else if (line.includes('INFO') || line.includes('info')) {
+                    div.className = 'log-info';
+                } else if (line.includes('DEBUG') || line.includes('debug')) {
+                    div.className = 'log-debug';
+                }
+                
+                div.textContent = line;
+                logContainer.appendChild(div);
+                
+                // Auto-scroll to bottom
                 logContainer.scrollTop = logContainer.scrollHeight;
-            };
+            }
 
-            eventSource.onerror = function(err) {
-                console.error("EventSource failed:", err);
-                eventSource.close();
-                logContainer.textContent += "\n--- Connection closed ---";
-            };
+            clearBtn.addEventListener('click', () => {
+                logContainer.innerHTML = '';
+                buffer = [];
+            });
+
+            pauseBtn.addEventListener('click', () => {
+                isPaused = !isPaused;
+                
+                if (isPaused) {
+                    pauseBtn.innerHTML = '<i class="fas fa-play"></i> Resume';
+                    pauseBtn.classList.remove('btn-danger');
+                    pauseBtn.classList.add('btn-primary');
+                    statusText.textContent = 'Paused';
+                } else {
+                    pauseBtn.innerHTML = '<i class="fas fa-pause"></i> Pause';
+                    pauseBtn.classList.remove('btn-primary');
+                    pauseBtn.classList.add('btn-danger');
+                    statusText.textContent = 'Connected';
+                    
+                    // Process buffered lines
+                    buffer.forEach(line => appendLogLine(line));
+                    buffer = [];
+                }
+            });
+
+            // Start the connection
+            connect();
+
+            // Clean up on page unload
+            window.addEventListener('beforeunload', () => {
+                if (eventSource) {
+                    eventSource.close();
+                }
+            });
         });
     </script>
 </body>
