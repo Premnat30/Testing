@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Multi-Host Authentication</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/skeleton/2.0.4/skeleton.min.css">
+    <style>
+        body { margin: 20px; }
+        .container { margin-top: 50px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="row">
+            <div class="twelve columns">
+                <h4>Authenticate for TBFX Environment</h4>
+                <p>Please enter the password to authenticate for the following hosts:</p>
+                <ul>
+                    {% for host in hosts %}
+                    <li>{{ host }}</li>
+                    {% endfor %}
+                </ul>
+
+                {% if error %}
+                    <p style="color: red;">{{ error }}</p>
+                {% endif %}
+
+                <form method="post" action="{{ url_for('authenticate') }}">
+                    <div class="row">
+                        <div class="six columns">
+                            <label for="username">UserName</label>
+                            <input class="u-full-width" type="username" id="username" name="username" required>
+                        </div>
+                        <div class="six columns">
+                            <label for="password">Password</label>
+                            <input class="u-full-width" type="password" id="password" name="password" required>
+                        </div>
+                    </div>
+                    <input class="button-primary" type="submit" value="Authenticate">
+                </form>
+            </div>
+        </div>
+    </div>
+</body>
