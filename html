@@ -185,43 +185,62 @@
         </div>
 
         <div class="environment-menu">
-            <!-- Environment 1 -->
-            <div class="environment-group">
-                <div class="environment-title">Environment 1</div>
-                <div class="host-buttons">
-                    <a href="{{ url_for('index', hostname='200') }}" class="host-btn logs {% if selected_host == '200' %}active{% endif %}">
-                        200 (Logs)
-                    </a>
-                    <a href="{{ url_for('process_task', hostname_key='200') }}" class="host-btn processes">
-                        200 (Processes)
-                    </a>
-                    <a href="{{ url_for('index', hostname='201') }}" class="host-btn logs {% if selected_host == '201' %}active{% endif %}">
-                        201 (Logs)
-                    </a>
-                    <a href="{{ url_for('process_task', hostname_key='201') }}" class="host-btn processes">
-                        201 (Processes)
-                    </a>
+            <!-- Environment Groups will be dynamically generated based on host names -->
+            {% set environment_groups = {
+                'Environment 1': ['200', '201'],
+                'Environment 2': ['202', '204']
+            } %}
+            
+            {% for env_name, env_hosts in environment_groups.items() %}
+                {% set show_environment = false %}
+                {% for host in env_hosts %}
+                    {% if host in hosts %}
+                        {% set show_environment = true %}
+                    {% endif %}
+                {% endfor %}
+                
+                {% if show_environment %}
+                <div class="environment-group">
+                    <div class="environment-title">{{ env_name }}</div>
+                    <div class="host-buttons">
+                        {% for host_key in env_hosts %}
+                            {% if host_key in hosts %}
+                            <a href="{{ url_for('index', hostname=host_key) }}" class="host-btn logs {% if host_key == selected_host %}active{% endif %}">
+                                {{ host_key }} (Logs)
+                            </a>
+                            <a href="{{ url_for('process_task', hostname_key=host_key) }}" class="host-btn processes">
+                                {{ host_key }} (Processes)
+                            </a>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
                 </div>
-            </div>
+                {% endif %}
+            {% endfor %}
 
-            <!-- Environment 2 -->
+            <!-- Fallback for any hosts not in predefined environments -->
+            {% set other_hosts = [] %}
+            {% for host_key in hosts %}
+                {% if host_key not in ['200', '201', '202', '204'] %}
+                    {% set _ = other_hosts.append(host_key) %}
+                {% endif %}
+            {% endfor %}
+            
+            {% if other_hosts %}
             <div class="environment-group">
-                <div class="environment-title">Environment 2</div>
+                <div class="environment-title">Other Environments</div>
                 <div class="host-buttons">
-                    <a href="{{ url_for('index', hostname='202') }}" class="host-btn logs {% if selected_host == '202' %}active{% endif %}">
-                        202 (Logs)
+                    {% for host_key in other_hosts %}
+                    <a href="{{ url_for('index', hostname=host_key) }}" class="host-btn logs {% if host_key == selected_host %}active{% endif %}">
+                        {{ host_key }} (Logs)
                     </a>
-                    <a href="{{ url_for('process_task', hostname_key='202') }}" class="host-btn processes">
-                        202 (Processes)
+                    <a href="{{ url_for('process_task', hostname_key=host_key) }}" class="host-btn processes">
+                        {{ host_key }} (Processes)
                     </a>
-                    <a href="{{ url_for('index', hostname='204') }}" class="host-btn logs {% if selected_host == '204' %}active{% endif %}">
-                        204 (Logs)
-                    </a>
-                    <a href="{{ url_for('process_task', hostname_key='204') }}" class="host-btn processes">
-                        204 (Processes)
-                    </a>
+                    {% endfor %}
                 </div>
             </div>
+            {% endif %}
         </div>
     </header>
 
