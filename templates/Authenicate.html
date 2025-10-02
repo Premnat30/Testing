@@ -5,8 +5,37 @@
     <title>Multi-Host Authentication</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/skeleton/2.0.4/skeleton.min.css">
     <style>
-        body { margin: 20px; }
-        .container { margin-top: 50px; }
+        body { 
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container { 
+            margin-top: 50px;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .host-list {
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
+        .error-message {
+            color: #e74c3c;
+            background: #fdf2f2;
+            padding: 10px;
+            border-radius: 4px;
+            border-left: 4px solid #e74c3c;
+        }
+        .success-message {
+            color: #27ae60;
+            background: #f2fdf2;
+            padding: 10px;
+            border-radius: 4px;
+            border-left: 4px solid #27ae60;
+        }
     </style>
 </head>
 <body>
@@ -14,31 +43,49 @@
         <div class="row">
             <div class="twelve columns">
                 <h4>Authenticate for TBFX Environment</h4>
-                <p>Please enter the password to authenticate for the following hosts:</p>
-                <ul>
-                    {% for host in hosts %}
-                    <li>{{ host }}</li>
-                    {% endfor %}
-                </ul>
+                <p>Please enter your SSH credentials to authenticate for the following hosts:</p>
+                
+                <div class="host-list">
+                    <strong>Available Hosts:</strong>
+                    <ul>
+                        {% for host in hosts %}
+                        <li>{{ host }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
 
                 {% if error %}
-                    <p style="color: red;">{{ error }}</p>
+                    <div class="error-message">
+                        <strong>Error:</strong> {{ error }}
+                    </div>
                 {% endif %}
 
-                <form method="post" action="{{ url_for('authenticate') }}">
+                <form method="POST" action="{{ url_for('authenticate') }}">
                     <div class="row">
                         <div class="six columns">
-                            <label for="username">UserName</label>
-                            <input class="u-full-width" type="username" id="username" name="username" required>
+                            <label for="username">Username</label>
+                            <input class="u-full-width" type="text" id="username" name="username" required 
+                                   placeholder="Enter SSH username">
                         </div>
                         <div class="six columns">
                             <label for="password">Password</label>
-                            <input class="u-full-width" type="password" id="password" name="password" required>
+                            <input class="u-full-width" type="password" id="password" name="password" required 
+                                   placeholder="Enter SSH password">
                         </div>
                     </div>
-                    <input class="button-primary" type="submit" value="Authenticate">
+                    <div class="row">
+                        <div class="twelve columns">
+                            <input class="button-primary" type="submit" value="Authenticate">
+                            <a href="{{ url_for('authenticate') }}" class="button">Clear</a>
+                        </div>
+                    </div>
                 </form>
+
+                <div style="margin-top: 20px; font-size: 12px; color: #666;">
+                    <p><strong>Note:</strong> Your credentials will be used to establish SSH connections to all listed hosts.</p>
+                </div>
             </div>
         </div>
     </div>
 </body>
+</html>
