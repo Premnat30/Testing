@@ -47,53 +47,104 @@
         }
 
         .environment-group {
-            margin-bottom: 15px;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .environment-group:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
         }
 
         .environment-title {
             font-weight: bold;
             color: #2c3e50;
-            margin-bottom: 8px;
+            margin-bottom: 12px;
             font-size: 16px;
             border-left: 4px solid #3498db;
             padding-left: 10px;
         }
 
-        .host-buttons {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            margin-left: 15px;
+        .host-row {
+            margin-bottom: 10px;
+            padding-left: 15px;
         }
 
-        .host-btn {
+        .host-name {
+            font-weight: 600;
+            color: #495057;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+        }
+
+        .host-name::before {
+            content: "🖥️";
+            margin-right: 8px;
+            font-size: 14px;
+        }
+
+        .action-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-left: 20px;
+        }
+
+        .action-btn {
             background-color: #fff;
             border: 1px solid #ddd;
-            padding: 8px 15px;
+            padding: 6px 12px;
             border-radius: 4px;
             text-decoration: none;
             color: #555;
             transition: all 0.2s;
-            font-size: 14px;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
         }
 
-        .host-btn:hover {
-            background-color: #e2e6ea;
-            border-color: #adb5bd;
+        .action-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
-        .host-btn.active {
+        .action-btn.logs {
+            border-left: 3px solid #28a745;
+        }
+
+        .action-btn.logs::before {
+            content: "📄";
+        }
+
+        .action-btn.logs:hover {
+            background-color: #e8f5e8;
+            border-color: #28a745;
+        }
+
+        .action-btn.processes {
+            border-left: 3px solid #dc3545;
+        }
+
+        .action-btn.processes::before {
+            content: "⚙️";
+        }
+
+        .action-btn.processes:hover {
+            background-color: #fde8e8;
+            border-color: #dc3545;
+        }
+
+        .action-btn.active {
             background-color: #007bff;
             color: white;
             border-color: #007bff;
         }
 
-        .host-btn.logs {
-            border-left: 3px solid #28a745;
-        }
-
-        .host-btn.processes {
-            border-left: 3px solid #dc3545;
+        .action-btn.active::before {
+            filter: brightness(0) invert(1);
         }
 
         h1, h2 {
@@ -168,8 +219,13 @@
                 gap: 10px;
             }
 
-            .host-buttons {
+            .action-buttons {
                 flex-direction: column;
+                margin-left: 10px;
+            }
+
+            .host-row {
+                padding-left: 10px;
             }
         }
     </style>
@@ -202,18 +258,21 @@
                 {% if show_environment %}
                 <div class="environment-group">
                     <div class="environment-title">{{ env_name }}</div>
-                    <div class="host-buttons">
-                        {% for host_key in env_hosts %}
-                            {% if host_key in hosts %}
-                            <a href="{{ url_for('index', hostname=host_key) }}" class="host-btn logs {% if host_key == selected_host %}active{% endif %}">
-                                {{ host_key }} (Logs)
-                            </a>
-                            <a href="{{ url_for('process_task', hostname_key=host_key) }}" class="host-btn processes">
-                                {{ host_key }} (Processes)
-                            </a>
-                            {% endif %}
-                        {% endfor %}
-                    </div>
+                    {% for host_key in env_hosts %}
+                        {% if host_key in hosts %}
+                        <div class="host-row">
+                            <div class="host-name">Host {{ host_key }}</div>
+                            <div class="action-buttons">
+                                <a href="{{ url_for('index', hostname=host_key) }}" class="action-btn logs {% if host_key == selected_host %}active{% endif %}">
+                                    View Logs
+                                </a>
+                                <a href="{{ url_for('process_task', hostname_key=host_key) }}" class="action-btn processes">
+                                    View Processes
+                                </a>
+                            </div>
+                        </div>
+                        {% endif %}
+                    {% endfor %}
                 </div>
                 {% endif %}
             {% endfor %}
@@ -229,16 +288,19 @@
             {% if other_hosts %}
             <div class="environment-group">
                 <div class="environment-title">Other Environments</div>
-                <div class="host-buttons">
-                    {% for host_key in other_hosts %}
-                    <a href="{{ url_for('index', hostname=host_key) }}" class="host-btn logs {% if host_key == selected_host %}active{% endif %}">
-                        {{ host_key }} (Logs)
-                    </a>
-                    <a href="{{ url_for('process_task', hostname_key=host_key) }}" class="host-btn processes">
-                        {{ host_key }} (Processes)
-                    </a>
-                    {% endfor %}
+                {% for host_key in other_hosts %}
+                <div class="host-row">
+                    <div class="host-name">Host {{ host_key }}</div>
+                    <div class="action-buttons">
+                        <a href="{{ url_for('index', hostname=host_key) }}" class="action-btn logs {% if host_key == selected_host %}active{% endif %}">
+                            View Logs
+                        </a>
+                        <a href="{{ url_for('process_task', hostname_key=host_key) }}" class="action-btn processes">
+                            View Processes
+                        </a>
+                    </div>
                 </div>
+                {% endfor %}
             </div>
             {% endif %}
         </div>
