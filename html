@@ -22,35 +22,78 @@
 
         header {
             background-color: #fff;
-            padding: 10px 20px;
+            padding: 20px;
             border-bottom: 1px solid #ddd;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .header-top {
             display: flex;
             align-items: center;
             justify-content: space-between;
+            margin-bottom: 15px;
         }
 
-        nav ul {
-            list-style: none;
-            margin: 0;
-            padding: 0;
+        .user-info {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .environment-menu {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .environment-group {
+            margin-bottom: 15px;
+        }
+
+        .environment-title {
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 8px;
+            font-size: 16px;
+            border-left: 4px solid #3498db;
+            padding-left: 10px;
+        }
+
+        .host-buttons {
             display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-left: 15px;
         }
 
-        nav li {
-            margin-right: 15px;
-        }
-
-        nav a {
+        .host-btn {
+            background-color: #fff;
+            border: 1px solid #ddd;
+            padding: 8px 15px;
+            border-radius: 4px;
             text-decoration: none;
             color: #555;
-            padding: 8px 12px;
-            border-radius: 4px;
-            transition: background-color 0.2s;
+            transition: all 0.2s;
+            font-size: 14px;
         }
 
-        nav a.active,
-        nav a:hover {
+        .host-btn:hover {
             background-color: #e2e6ea;
+            border-color: #adb5bd;
+        }
+
+        .host-btn.active {
+            background-color: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+
+        .host-btn.logs {
+            border-left: 3px solid #28a745;
+        }
+
+        .host-btn.processes {
+            border-left: 3px solid #dc3545;
         }
 
         h1, h2 {
@@ -81,7 +124,7 @@
             padding: 8px;
             border: 1px solid #ccc;
             border-radius: 4px;
-            box-sizing: border-box; /* Ensures padding doesn't affect total width */
+            box-sizing: border-box;
         }
 
         .button-group {
@@ -103,44 +146,83 @@
             background-color: #0056b3;
         }
 
+        .logout-btn {
+            background-color: #6c757d;
+            color: white;
+            text-decoration: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            font-size: 14px;
+            margin-left: 10px;
+        }
+
+        .logout-btn:hover {
+            background-color: #545b62;
+        }
+
         /* Responsive design for smaller screens */
         @media (max-width: 768px) {
-            header {
+            .header-top {
                 flex-direction: column;
                 align-items: flex-start;
+                gap: 10px;
             }
 
-            nav ul {
+            .host-buttons {
                 flex-direction: column;
-                margin-top: 10px;
-            }
-
-            nav li {
-                margin: 5px 0;
             }
         }
     </style>
 </head>
 <body>
     <header>
-        <h1>Monitor Logs and Processes</h1>
-        <nav>
-            <ul>
-                <!-- Menu to switch between hosts -->
-                {% for host_key in hosts %}
-                <li>
-                    <a href="{{ url_for('index', hostname=host_key) }}" class="{% if host_key == selected_host %}active{% endif %}">
-                        {{ host_key }} (Logs)
+        <div class="header-top">
+            <h1>Monitor Logs and Processes</h1>
+            <div class="user-info">
+                Welcome, {{ username }} 
+                <a href="{{ url_for('logout') }}" class="logout-btn">Logout</a>
+            </div>
+        </div>
+
+        <div class="environment-menu">
+            <!-- Environment 1 -->
+            <div class="environment-group">
+                <div class="environment-title">Environment 1</div>
+                <div class="host-buttons">
+                    <a href="{{ url_for('index', hostname='200') }}" class="host-btn logs {% if selected_host == '200' %}active{% endif %}">
+                        200 (Logs)
                     </a>
-                </li>
-                <li>
-                    <a href="{{ url_for('process_task', hostname_key=host_key) }}">
-                        {{ host_key }} (Processes)
+                    <a href="{{ url_for('process_task', hostname_key='200') }}" class="host-btn processes">
+                        200 (Processes)
                     </a>
-                </li>
-                {% endfor %}
-            </ul>
-        </nav>
+                    <a href="{{ url_for('index', hostname='201') }}" class="host-btn logs {% if selected_host == '201' %}active{% endif %}">
+                        201 (Logs)
+                    </a>
+                    <a href="{{ url_for('process_task', hostname_key='201') }}" class="host-btn processes">
+                        201 (Processes)
+                    </a>
+                </div>
+            </div>
+
+            <!-- Environment 2 -->
+            <div class="environment-group">
+                <div class="environment-title">Environment 2</div>
+                <div class="host-buttons">
+                    <a href="{{ url_for('index', hostname='202') }}" class="host-btn logs {% if selected_host == '202' %}active{% endif %}">
+                        202 (Logs)
+                    </a>
+                    <a href="{{ url_for('process_task', hostname_key='202') }}" class="host-btn processes">
+                        202 (Processes)
+                    </a>
+                    <a href="{{ url_for('index', hostname='204') }}" class="host-btn logs {% if selected_host == '204' %}active{% endif %}">
+                        204 (Logs)
+                    </a>
+                    <a href="{{ url_for('process_task', hostname_key='204') }}" class="host-btn processes">
+                        204 (Processes)
+                    </a>
+                </div>
+            </div>
+        </div>
     </header>
 
     <main class="container">
@@ -162,7 +244,7 @@
         <!-- The "Search and Filter" section is now second -->
         <div class="card">
             <h3>Search and Live Tail</h3>
-            <form action="/grep" method="GET">
+            <form action="/search" method="GET">
                 <input type="hidden" name="hostname" value="{{ selected_host }}">
                 
                 <div class="form-group">
@@ -177,8 +259,8 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="grep_query">Search Query:</label>
-                    <input type="text" name="grep_query" id="grep_query" placeholder="e.g., 'error'">
+                    <label for="query">Search Query:</label>
+                    <input type="text" name="query" id="query" placeholder="e.g., 'error'">
                 </div>
 
                 <div class="button-group">
@@ -198,7 +280,6 @@
             tailButton.addEventListener('click', function() {
                 const filename = logFileSelect.value;
                 if (filename) {
-                    // Assuming you have a /tail endpoint configured in your Flask app
                     const url = `/tail/${hostnameKey}/${filename}`;
                     window.location.href = url;
                 } else {
