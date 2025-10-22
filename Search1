@@ -6,7 +6,37 @@ from flask import Flask, render_template, request, Response, abort, session, red
 from flask_session import Session
 import secrets
 import logging
+from logging.handlers import RotatingFileHandler
 from config import get_host_config  # Import from config.py
+
+# --- Comprehensive Logging Setup ---
+LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
+if not os.path.exists(LOG_DIR):
+    os.makedirs(LOG_DIR)
+
+def setup_logger(name, log_file, level=logging.INFO):
+    """Function to setup multiple loggers"""
+    log_file_path = os.path.join(LOG_DIR, log_file)
+    
+    handler = RotatingFileHandler(log_file_path, maxBytes=10*1024*1024, backupCount=5, encoding='utf-8')
+    handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    
+    logger = logging.getLogger(name)
+    logger.setLevel(level)
+    logger.addHandler(handler)
+    
+    # Also add console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    logger.addHandler(console_handler)
+    
+    return logger
+
+# Create different loggers for different purposes
+app_logger = setup_logger('app', 'app.log')
+auth_logger = setup_logger('auth', 'auth.log')
+ssh_logger = setup_logger('ssh', 'ssh.log')
+error_logger = setup_logger('error', 'errors.log')
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -52,6 +82,8 @@ def _get_ssh_client(hostname_config, username, password):
     try:
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        app_logger.info(f"Attempting SSH connection to {hostname_config['hostname']} with user {username}")
+        
         client.connect(
             hostname=hostname_config['hostname'],
             username=username,  # Use the provided username
@@ -59,12 +91,20 @@ def _get_ssh_client(hostname_config, username, password):
             look_for_keys=False,
             timeout=10
         )
+        
+        app_logger.info(f"SSH connection successful to {hostname_config['hostname']}")
         return client
+        
     except paramiko.AuthenticationException:
-        app.logger.error(f"Authentication failed for {hostname_config['hostname']} with user {username}")
+        error_msg = f"Authentication failed for {hostname_config['hostname']} with user {username}"
+        error_logger.error(error_msg)
+        app_logger.error(error_msg)
         return None
+        
     except Exception as e:
-        app.logger.error(f"SSH connection failed for {hostname_config['hostname']}: {e}")
+        error_msg = f"SSH connection failed for {hostname_config['hostname']}: {e}"
+        error_logger.error(error_msg)
+        app_logger.error(error_msg)
         return None
 
 # --- Get host credentials from session ---
@@ -94,6 +134,8 @@ def authenticate():
     
     if request.method == 'POST':
         username = request.form['username']
+        auth_logger.info(f"Authentication attempt for user: {username}")
+        
         password = request.form['password']
         authenticated_hosts = {}
         
@@ -105,10 +147,13 @@ def authenticate():
                     'username': username,
                     'password': password
                 }
+                auth_logger.info(f"Successfully authenticated to {hostname_key}")
 
         if authenticated_hosts:
             session['credentials'] = authenticated_hosts
             session['current_user'] = username
+            auth_logger.info(f"User {username} successfully authenticated to {len(authenticated_hosts)} hosts")
+            
             # Initialize form states for all authenticated hosts
             if 'form_states' not in session:
                 session['form_states'] = {}
@@ -121,16 +166,19 @@ def authenticate():
                     }
             return redirect(url_for('index'))
         else:
+            auth_logger.warning(f"Authentication failed for user {username} on all hosts")
             return render_template('authenticate.html', 
                                  hosts=HOST_CONFIG.keys(), 
                                  error="Authentication failed for all hosts with the provided credentials.")
     
+    app_logger.info("Authentication page accessed")
     return render_template('authenticate.html', hosts=HOST_CONFIG.keys())
 
 # --- Index Route for Log Searching ---
 @app.route('/')
 def index():
     if 'credentials' not in session or not session['credentials']:
+        app_logger.info("No credentials in session, redirecting to authenticate")
         return redirect(url_for('authenticate'))
 
     HOST_CONFIG = get_host_config()
@@ -140,12 +188,14 @@ def index():
 
     credentials = get_host_credentials(hostname_key)
     if not credentials:
+        app_logger.warning(f"No credentials found for host {hostname_key}")
         return redirect(url_for('authenticate'))
 
     hostname_config = HOST_CONFIG.get(hostname_key)
     client = _get_ssh_client(hostname_config, credentials['username'], credentials['password'])
     if not client:
         session.get('credentials', {}).pop(hostname_key, None)
+        app_logger.warning(f"SSH connection failed for {hostname_key}, removing from credentials")
         return redirect(url_for('authenticate'))
 
     # Get form state from session or request parameters
@@ -162,17 +212,23 @@ def index():
 
     log_files = []
     try:
+        app_logger.info(f"Reading log directory for host {hostname_key}")
         stdin, stdout, stderr = client.exec_command(f"ls {hostname_config['log_dir']}")
         all_files = stdout.read().decode().strip().split('\n')
         client.close()
         if filename_filter:
             log_files = [f for f in all_files if filename_filter in f.lower()]
+            app_logger.info(f"Filtered log files with filter '{filename_filter}': {len(log_files)} files found")
         else:
             log_files = all_files
+            app_logger.info(f"Found {len(log_files)} log files without filter")
         log_files.sort()
     except Exception as e:
-        return f"An error occurred while reading the remote log directory: {e}", 500
+        error_msg = f"An error occurred while reading the remote log directory for {hostname_key}: {e}"
+        error_logger.error(error_msg)
+        return error_msg, 500
 
+    app_logger.info(f"Index page rendered for host {hostname_key} by user {session.get('current_user', 'Unknown')}")
     return render_template('search.html',
         log_files=log_files,
         filename_filter=filename_filter,
@@ -188,28 +244,35 @@ def process_task(hostname_key):
     # Check for authentication
     credentials = get_host_credentials(hostname_key)
     if not credentials:
+        app_logger.warning(f"Unauthorized access attempt to processes for host {hostname_key}")
         return redirect(url_for('authenticate'))
 
     HOST_CONFIG = get_host_config()
     hostname_config = HOST_CONFIG.get(hostname_key)
     if not hostname_config:
+        error_logger.error(f"Host not found in configuration: {hostname_key}")
         abort(404, description="Host not found.")
 
     processes = []
     error = None
+    app_logger.info(f"Fetching processes for host {hostname_key}")
     client = _get_ssh_client(hostname_config, credentials['username'], credentials['password'])
     if client:
         try:
             stdin, stdout, stderr = client.exec_command('ps aux')
             output = stdout.read().decode('utf-8').splitlines()
             processes = _parse_ps_output(output)
+            app_logger.info(f"Successfully fetched {len(processes)} processes from {hostname_key}")
         except Exception as e:
             error = f"Failed to fetch processes: {e}"
+            error_logger.error(f"Error fetching processes from {hostname_key}: {e}")
         finally:
             client.close()
     else:
         error = f"Failed to connect to host '{hostname_key}'."
+        error_logger.error(f"SSH connection failed for process task on {hostname_key}")
     
+    app_logger.info(f"Process task completed for host {hostname_key}")
     return render_template('process_task.html',
         host_name=hostname_key,
         processes=processes,
@@ -227,6 +290,7 @@ def search_logs():
     selected_log = request.args.get('log_file')
     query = request.args.get('query','')
     
+    app_logger.info(f"Search request - Host: {hostname_key}, Log: {selected_log}, Query: {query}")
     
     if hostname_key:
         form_state = get_form_state(hostname_key)
@@ -238,24 +302,34 @@ def search_logs():
         save_form_state(hostname_key, updated_form_state)
 
     if not selected_log:
+        error_logger.warning("Search attempted without selecting log file")
         return "No log file selected.", 400
 
     requested_path = os.path.join(LOGS_DIR, selected_log)
     real_requested_path = os.path.realpath(requested_path)
 
     if not real_requested_path.startswith(LOGS_DIR):
+        error_logger.warning(f"Invalid log file path attempted: {real_requested_path}")
         return "Invalid log file path.", 400
 
     results = []
     try:
+        app_logger.info(f"Searching in log file: {real_requested_path} for query: {query}")
         with open(real_requested_path, 'r', encoding='utf-8', errors='ignore') as log_file:
             for line in log_file:
                 if query.lower() in line.lower():
                     results.append(line.strip())
+        
+        app_logger.info(f"Search completed. Found {len(results)} results for query '{query}' in {selected_log}")
+        
     except FileNotFoundError:
-        return f"Log file '{selected_log}' not found.", 404
+        error_msg = f"Log file '{selected_log}' not found."
+        error_logger.error(error_msg)
+        return error_msg, 404
     except Exception as e:
-        return f"An error occurred: {e}", 500
+        error_msg = f"An error occurred during search: {e}"
+        error_logger.error(error_msg)
+        return error_msg, 500
 
     HOST_CONFIG = get_host_config()
     return render_template('search_result.html',
@@ -272,10 +346,13 @@ def search_logs():
 def tail_log(hostname_key, filename):
     HOST_CONFIG = get_host_config()
     if hostname_key not in HOST_CONFIG:
+        error_logger.warning(f"Invalid hostname requested for tail: {hostname_key}")
         return "Invalid hostname.", 400
     if not get_host_credentials(hostname_key):
+        app_logger.warning(f"Unauthorized access attempt to tail log for host {hostname_key}")
         return redirect(url_for('authenticate', hostname=hostname_key))
     
+    app_logger.info(f"Tail log page accessed for {filename} on host {hostname_key}")
     return render_template('tail.html', 
                          log_file=filename, 
                          hostname_key=hostname_key, 
@@ -286,18 +363,22 @@ def tail_log(hostname_key, filename):
 def stream_logs(hostname_key, filename):
     credentials = get_host_credentials(hostname_key)
     if not credentials:
+        error_logger.warning(f"Unauthorized stream attempt for host {hostname_key}")
         return Response("Error: Authentication required for this host.", status=401)
     
     HOST_CONFIG = get_host_config()
     hostname_config = HOST_CONFIG.get(hostname_key)
     if not hostname_config:
+        error_logger.error(f"Host configuration not found for streaming: {hostname_key}")
         return "Invalid hostname.", 400
 
     client = _get_ssh_client(hostname_config, credentials['username'], credentials['password'])
     if not client:
+        error_logger.error(f"SSH connection failed for streaming on {hostname_key}")
         return f"Could not connect to host '{hostname_key}'.", 500
     
     log_file_path = os.path.join(hostname_config['log_dir'], filename)
+    app_logger.info(f"Starting log streaming for {log_file_path} on host {hostname_key}")
 
     return Response(stream_with_context(follow_remote(client, log_file_path)), mimetype='text/event-stream')
 
@@ -307,6 +388,8 @@ def follow_remote(client, log_file_path):
         transport = client.get_transport()
         channel = transport.open_session()
         channel.exec_command(command)
+        
+        app_logger.info(f"Started tail command for: {log_file_path}")
         
         while not channel.exit_status_ready():
             if channel.recv_ready():
@@ -322,17 +405,22 @@ def follow_remote(client, log_file_path):
             for line in output.splitlines():
                 yield f"data: {line}\n\n"
         
+        app_logger.info(f"Tail command completed for: {log_file_path}")
         yield f"data: --- Command finished with status {channel.exit_status_ready()} ---\n\n"
 
     except Exception as e:
-        yield f"data: --- Error during streaming: {e} ---\n\n"
+        error_msg = f"Error during streaming: {e}"
+        error_logger.error(error_msg)
+        yield f"data: --- {error_msg} ---\n\n"
     finally:
         client.close()
+        app_logger.info(f"SSH client closed for streaming: {log_file_path}")
 
 # --- Clear Form State Route ---
 @app.route('/clear_form_state/<hostname_key>')
 def clear_form_state(hostname_key):
     """Clear form state for a specific host"""
+    app_logger.info(f"Clearing form state for host: {hostname_key}")
     if 'form_states' in session and hostname_key in session['form_states']:
         session['form_states'][hostname_key] = {
             'filename_filter': '',
@@ -340,13 +428,37 @@ def clear_form_state(hostname_key):
             'search_query': ''
         }
         session.modified = True
+        app_logger.info(f"Form state cleared for host: {hostname_key}")
     return redirect(url_for('index', hostname=hostname_key))
 
 # --- Logout Route ---
 @app.route('/logout')
 def logout():
+    username = session.get('current_user', 'Unknown')
+    app_logger.info(f"User {username} logged out")
     session.clear()
     return redirect(url_for('authenticate'))
 
+# --- Error Handlers ---
+@app.errorhandler(404)
+def not_found_error(error):
+    error_logger.error(f'404 error: {error}')
+    return render_template('404.html'), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    error_logger.error(f'500 error: {error}')
+    return render_template('500.html'), 500
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    error_logger.error(f'Unhandled exception: {e}')
+    return "An internal error occurred", 500
+
 if __name__ == '__main__':
-    app.run( port=5000, debug=True)
+    app_logger.info("Starting Flask application on port 5000")
+    try:
+        app.run(host='0.0.0.0', port=5000, debug=False)
+    except Exception as e:
+        error_logger.critical(f"Failed to start Flask application: {e}")
+        raise
