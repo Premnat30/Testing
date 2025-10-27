@@ -74,6 +74,54 @@
             transform: translateY(-1px);
         }
 
+        .environment-selector {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .environment-selector h3 {
+            font-size: 18px;
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .environment-selector h3 i {
+            color: #3498db;
+        }
+
+        .environment-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .env-option {
+            background: white;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            padding: 12px 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+
+        .env-option:hover {
+            border-color: #3498db;
+            transform: translateY(-2px);
+        }
+
+        .env-option.active {
+            background: #3498db;
+            color: white;
+            border-color: #3498db;
+        }
+
         .environment-menu {
             background: #f8f9fa;
             border-radius: 8px;
@@ -288,6 +336,10 @@
             .user-info {
                 justify-content: center;
             }
+            
+            .environment-options {
+                flex-direction: column;
+            }
         }
     </style>
 </head>
@@ -308,51 +360,81 @@
                 </div>
             </div>
 
-            <div class="environment-menu">
-                {% set environment_groups = {
-                    'Environment 1': ['200', '201'],
-                    'Environment 2': ['202', '204']
-                } %}
-                
-                {% for env_name, env_hosts in environment_groups.items() %}
-                    {% set show_environment = false %}
-                    {% for host in env_hosts %}
-                        {% if host in hosts %}
-                            {% set show_environment = true %}
-                        {% endif %}
-                    {% endfor %}
-                    
-                    {% if show_environment %}
-                    <div class="environment-group">
-                        <div class="environment-title">{{ env_name }}</div>
-                        <div class="host-grid">
-                            {% for host_key in env_hosts %}
-                                {% if host_key in hosts %}
-                                <div class="host-card">
-                                    <div class="host-header">
-                                        <i class="fas fa-server"></i>
-                                        Host {{ host_key }}
-                                    </div>
-                                    <div class="host-actions">
-                                        <a href="{{ url_for('index', hostname=host_key) }}" 
-                                           class="action-btn logs {% if host_key == selected_host %}active{% endif %}">
-                                            <i class="fas fa-file-lines"></i>
-                                            Logs
-                                        </a>
-                                        <a href="{{ url_for('process_task', hostname_key=host_key) }}" 
-                                           class="action-btn processes">
-                                            <i class="fas fa-microchip"></i>
-                                            Processes
-                                        </a>
-                                    </div>
-                                </div>
-                                {% endif %}
-                            {% endfor %}
-                        </div>
-                    </div>
-                    {% endif %}
-                {% endfor %}
+            <!-- Environment Selector -->
+            <div class="environment-selector">
+                <h3>
+                    <i class="fas fa-globe"></i>
+                    Select Environment
+                </h3>
+                <div class="environment-options">
+                    <div class="env-option active" data-env="all">All Environments</div>
+                    <div class="env-option" data-env="env1">Environment 1</div>
+                    <div class="env-option" data-env="env2">Environment 2</div>
+                    <div class="env-option" data-env="other">Other Environments</div>
+                </div>
+            </div>
 
+            <!-- Environment Menu -->
+            <div class="environment-menu">
+                <!-- Environment 1 -->
+                <div class="environment-group" data-env="env1">
+                    <div class="environment-title">Environment 1</div>
+                    <div class="host-grid">
+                        {% for host_key in ['200', '201'] %}
+                            {% if host_key in hosts %}
+                            <div class="host-card">
+                                <div class="host-header">
+                                    <i class="fas fa-server"></i>
+                                    Host {{ host_key }}
+                                </div>
+                                <div class="host-actions">
+                                    <a href="{{ url_for('index', hostname=host_key) }}" 
+                                       class="action-btn logs {% if host_key == selected_host %}active{% endif %}">
+                                        <i class="fas fa-file-lines"></i>
+                                        Logs
+                                    </a>
+                                    <a href="{{ url_for('process_task', hostname_key=host_key) }}" 
+                                       class="action-btn processes">
+                                        <i class="fas fa-microchip"></i>
+                                        Processes
+                                    </a>
+                                </div>
+                            </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Environment 2 -->
+                <div class="environment-group" data-env="env2">
+                    <div class="environment-title">Environment 2</div>
+                    <div class="host-grid">
+                        {% for host_key in ['202', '204'] %}
+                            {% if host_key in hosts %}
+                            <div class="host-card">
+                                <div class="host-header">
+                                    <i class="fas fa-server"></i>
+                                    Host {{ host_key }}
+                                </div>
+                                <div class="host-actions">
+                                    <a href="{{ url_for('index', hostname=host_key) }}" 
+                                       class="action-btn logs {% if host_key == selected_host %}active{% endif %}">
+                                        <i class="fas fa-file-lines"></i>
+                                        Logs
+                                    </a>
+                                    <a href="{{ url_for('process_task', hostname_key=host_key) }}" 
+                                       class="action-btn processes">
+                                        <i class="fas fa-microchip"></i>
+                                        Processes
+                                    </a>
+                                </div>
+                            </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Other Environments -->
                 {% set other_hosts = [] %}
                 {% for host_key in hosts %}
                     {% if host_key not in ['200', '201', '202', '204'] %}
@@ -361,7 +443,7 @@
                 {% endfor %}
                 
                 {% if other_hosts %}
-                <div class="environment-group">
+                <div class="environment-group" data-env="other">
                     <div class="environment-title">Other Environments</div>
                     <div class="host-grid">
                         {% for host_key in other_hosts %}
@@ -463,6 +545,31 @@
                 } else {
                     alert('Please select a log file for live tail.');
                 }
+            });
+
+            // Environment selection functionality
+            const envOptions = document.querySelectorAll('.env-option');
+            const envGroups = document.querySelectorAll('.environment-group');
+            
+            envOptions.forEach(option => {
+                option.addEventListener('click', function() {
+                    // Remove active class from all options
+                    envOptions.forEach(opt => opt.classList.remove('active'));
+                    
+                    // Add active class to clicked option
+                    this.classList.add('active');
+                    
+                    const selectedEnv = this.getAttribute('data-env');
+                    
+                    // Show/hide environment groups based on selection
+                    envGroups.forEach(group => {
+                        if (selectedEnv === 'all' || group.getAttribute('data-env') === selectedEnv) {
+                            group.style.display = 'block';
+                        } else {
+                            group.style.display = 'none';
+                        }
+                    });
+                });
             });
         });
     </script>
