@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <div class="card">
+            <div class="card-header">
+                <h4>Search Log Files</h4>
+            </div>
+            <div class="card-body">
+                <form id="searchForm" action="/search" method="POST">
+                    <div class="mb-3">
+                        <label for="server" class="form-label">Select Server</label>
+                        <select class="form-select" id="server" name="server" required>
+                            <option value="">Choose server...</option>
+                            <option value="200a">200a.friends.com</option>
+                            <option value="201a">201a.friends.com</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="fileFilter" class="form-label">Filter Log Files</label>
+                        <input type="text" class="form-control" id="fileFilter" 
+                               placeholder="Enter text to filter log files...">
+                        <div class="form-text">Leave empty to see all log files</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="filePath" class="form-label">Select Log File</label>
+                        <select class="form-select" id="filePath" name="file_path" required>
+                            <option value="">Select a log file...</option>
+                        </select>
+                        <button type="button" class="btn btn-outline-secondary btn-sm mt-2" 
+                                id="refreshFiles">Refresh Files</button>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="searchText" class="form-label">Search Text</label>
+                        <input type="text" class="form-control" id="searchText" 
+                               name="search_text" placeholder="Enter text to search in logs..." required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="maxResults" class="form-label">Max Results</label>
+                        <input type="number" class="form-control" id="maxResults" 
+                               name="max_results" value="100" min="1" max="1000">
+                    </div>
+                    
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary">Search Logs</button>
+                        <button type="button" class="btn btn-success" id="liveTailBtn">Live Tail</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Live Tail Output -->
+        <div class="card mt-4 d-none" id="liveTailCard">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5>Live Tail Output</h5>
+                <button type="button" class="btn-close" id="closeLiveTail"></button>
+            </div>
+            <div class="card-body">
+                <div id="liveTailOutput" class="log-output"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const serverSelect = document.getElementById('server');
+    const fileFilter = document.getElementById('fileFilter');
+    const filePathSelect = document.getElementById('filePath');
+    const refreshBtn = document.getElementById('refreshFiles');
+    const liveTailBtn = document.getElementById('liveTailBtn');
+    const liveTailCard = document.getElementById('liveTailCard');
+    const liveTailOutput = document.getElementById('liveTailOutput');
+    const closeLiveTail = document.getElementById('closeLiveTail');
+    
+    let eventSource = null;
+    
+    function loadLogFiles() {
+        const server = serverSelect.value;
+        const filter = fileFilter.value;
+        
+        if (!server) {
+            filePathSelect.innerHTML = '<option value="">Select a log file...</option>';
+            return;
+        }
+        
+        fetch(`/get_log_files?server=${server}&filter=${encodeURIComponent(filter)}`)
+            .then(response => response.json())
+            .then(data => {
+                filePathSelect.innerHTML = '<option value="">Select a log file...</option>';
+                if (data.log_files && data.log_files.length > 0) {
+                    data.log_files.forEach(file => {
+                        const option = document.createElement('option');
+                        option.value = file.path;
+                        option.textContent = `${file.name} (${file.path})`;
+                        filePathSelect.appendChild(option);
+                    });
+                } else {
+                    const option = document.createElement('option');
+                    option.value = '';
+                    option.textContent = 'No log files found';
+                    filePathSelect.appendChild(option);
+                }
+            })
+            .catch(error => {
+                console.error('Error loading log files:', error);
+            });
+    }
+    
+    serverSelect.addEventListener('change', loadLogFiles);
+    refreshBtn.addEventListener('click', loadLogFiles);
+    fileFilter.addEventListener('input', loadLogFiles);
+    
+    liveTailBtn.addEventListener('click', function() {
+        const server = serverSelect.value;
+        const filePath = filePathSelect.value;
+        
+        if (!server || !filePath) {
+            alert('Please select both server and log file');
+            return;
+        }
+        
+        // Close existing connection
+        if (eventSource) {
+            eventSource.close();
+        }
+        
+        // Show live tail card
+        liveTailCard.classList.remove('d-none');
+        liveTailOutput.innerHTML = '';
+        
+        // Start live tail
+        eventSource = new EventSource(`/live_tail?server=${server}&file_path=${encodeURIComponent(filePath)}`);
+        
+        eventSource.onmessage = function(event) {
+            const line = document.createElement('div');
+            line.textContent = event.data;
+            liveTailOutput.appendChild(line);
+            liveTailOutput.scrollTop = liveTailOutput.scrollHeight;
+        };
+        
+        eventSource.onerror = function(event) {
+            console.error('SSE error:', event);
+            const errorLine = document.createElement('div');
+            errorLine.className = 'text-danger';
+            errorLine.textContent = 'Error in live tail connection';
+            liveTailOutput.appendChild(errorLine);
+        };
+    });
+    
+    closeLiveTail.addEventListener('click', function() {
+        if (eventSource) {
+            eventSource.close();
+            eventSource = null;
+        }
+        liveTailCard.classList.add('d-none');
+    });
+});
+</script>
+{% endblock %}
