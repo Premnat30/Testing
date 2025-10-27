@@ -231,6 +231,17 @@
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 25px;
+            opacity: 0;
+            transform: translateY(20px);
+            transition: all 0.5s ease;
+            max-height: 0;
+            overflow: hidden;
+        }
+
+        .main-content.active {
+            opacity: 1;
+            transform: translateY(0);
+            max-height: 1000px;
         }
 
         .card {
@@ -318,6 +329,21 @@
             transform: translateY(-1px);
         }
 
+        .no-environment-selected {
+            text-align: center;
+            padding: 40px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            color: #6c757d;
+        }
+
+        .no-environment-selected i {
+            font-size: 48px;
+            margin-bottom: 15px;
+            color: #dee2e6;
+        }
+
         @media (max-width: 768px) {
             .main-content {
                 grid-template-columns: 1fr;
@@ -367,7 +393,7 @@
                     Select Environment
                 </h3>
                 <div class="environment-options">
-                    <div class="env-option active" data-env="all">All Environments</div>
+                    <div class="env-option" data-env="all">All Environments</div>
                     <div class="env-option" data-env="env1">Environment 1</div>
                     <div class="env-option" data-env="env2">Environment 2</div>
                     <div class="env-option" data-env="other">Other Environments</div>
@@ -472,7 +498,15 @@
             </div>
         </div>
 
-        <div class="main-content">
+        <!-- Placeholder when no environment is selected -->
+        <div class="no-environment-selected" id="no-environment-message">
+            <i class="fas fa-globe-americas"></i>
+            <h3>Select an Environment to Continue</h3>
+            <p>Please choose an environment from the options above to access log filtering and search features.</p>
+        </div>
+
+        <!-- Main Content (Hidden until environment is selected) -->
+        <div class="main-content" id="main-content">
             <div class="card">
                 <h3>
                     <i class="fas fa-filter"></i>
@@ -536,16 +570,24 @@
             const tailButton = document.getElementById('tail-button');
             const logFileSelect = document.getElementById('log_file_search');
             const hostnameKey = "{{ selected_host }}";
+            const mainContent = document.getElementById('main-content');
+            const noEnvironmentMessage = document.getElementById('no-environment-message');
 
-            tailButton.addEventListener('click', function() {
-                const filename = logFileSelect.value;
-                if (filename) {
-                    const url = `/tail/${hostnameKey}/${filename}`;
-                    window.location.href = url;
-                } else {
-                    alert('Please select a log file for live tail.');
-                }
-            });
+            // Initialize - hide main content and show placeholder
+            mainContent.classList.remove('active');
+            noEnvironmentMessage.style.display = 'block';
+
+            if (tailButton) {
+                tailButton.addEventListener('click', function() {
+                    const filename = logFileSelect.value;
+                    if (filename) {
+                        const url = `/tail/${hostnameKey}/${filename}`;
+                        window.location.href = url;
+                    } else {
+                        alert('Please select a log file for live tail.');
+                    }
+                });
+            }
 
             // Environment selection functionality
             const envOptions = document.querySelectorAll('.env-option');
@@ -569,8 +611,22 @@
                             group.style.display = 'none';
                         }
                     });
+                    
+                    // Show main content and hide placeholder
+                    mainContent.classList.add('active');
+                    noEnvironmentMessage.style.display = 'none';
+                    
+                    // Update hidden hostname field if a specific host is selected
+                    updateSelectedHost();
                 });
             });
+            
+            // Function to update the selected host in forms
+            function updateSelectedHost() {
+                const hostInputs = document.querySelectorAll('input[name="hostname"]');
+                // This would need to be implemented based on your specific host selection logic
+                // For now, we'll keep the default selected_host
+            }
         });
     </script>
 </body>
